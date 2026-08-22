@@ -36,6 +36,12 @@ To create a new administrator password hash:
 
 3. Type the password twice. The command prints an Argon2id hash.
 4. Put that hash in `.env` as `VENUE_INVENTORY_ADMIN_PASSWORD_HASH`.
+   Docker Compose treats `$` as a variable, so double every `$` in the
+   printed hash (`$argon2id$v=19$...` becomes `$$argon2id$$v=19$$...`).
+   Pasting the hash unchanged makes Compose mangle it and startup fails
+   with "must be an Argon2id encoded hash". To skip that editing, put
+   the printed hash in a file and set
+   `VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE` to that file's path instead.
 5. Restart with `docker compose up --build --wait`.
 
 The application never stores the password or the hash in SQLite.
