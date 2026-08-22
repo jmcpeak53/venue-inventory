@@ -18,6 +18,15 @@ The page asks search engines not to index it, but the URL is not private or
 authenticated. Add TLS and authentication before storing sensitive inventory
 data.
 
+The Compose `web` service publishes port 8080 with
+`VENUE_INVENTORY_TRUST_PROXY=false`. Docker's published-port proxy typically
+makes every inbound connection look like the bridge gateway, so administrator
+sign-in rate limits and `client_ip` log fields are shared across visitors.
+When Caddy (or another HTTP reverse proxy) is placed in front and sets
+`X-Forwarded-For` and `X-Forwarded-Proto`, set
+`VENUE_INVENTORY_TRUST_PROXY=true` so those values are used. Do not enable
+it for the raw published port; clients could spoof the forwarded headers.
+
 ## Deploy the latest committed change
 
 The coding machine already has an SSH profile named `prod-vps-01`. From the

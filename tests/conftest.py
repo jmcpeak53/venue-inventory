@@ -80,9 +80,10 @@ def read_csrf(client: FlaskClient, path: str = "/admin/login") -> str:
     return csrf_token(response)
 
 
-def sign_in(client: FlaskClient, password: str = TEST_PASSWORD):
+def sign_in(client: FlaskClient, password: str = TEST_PASSWORD, **request_kwargs):
     token = read_csrf(client)
     return client.post(
         "/admin/login",
         data={"csrf_token": token, "password": password},
+        **request_kwargs,
     )

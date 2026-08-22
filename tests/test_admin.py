@@ -185,6 +185,77 @@ def test_login_page_has_labeled_password_field(client: FlaskClient) -> None:
     assert read_csrf(client)
 
 
+def test_failed_logins_are_limited_per_remote_addr(client: FlaskClient) -> None:
+    for _ in range(MAX_FAILED_ATTEMPTS):
+        response = sign_in(
+            client, password="nope", environ_base={"REMOTE_ADDR": "10.0.0.8"}
+        )
+        assert response.status_code == 200
+    blocked = sign_in(
+        client, password=TEST_PASSWORD, environ_base={"REMOTE_ADDR": "10.0.0.8"}
+    )
+    assert blocked.status_code == 429
+    other = sign_in(
+        client, password=TEST_PASSWORD, environ_base={"REMOTE_ADDR": "10.0.0.9"}
+    )
+    assert other.status_code == 302
+    assert client.get("/admin/").status_code == 200
+
+
+def test_untrusted_forwarded_for_does_not_split_rate_limit_buckets(
+    client: FlaskClient,
+) -> None:
+    for index in range(MAX_FAILED_ATTEMPTS):
+        response = sign_in(
+            client,
+            password="nope",
+            headers={"X-Forwarded-For": f"203.0.113.{index}"},
+        )
+        assert response.status_code == 200
+    blocked = sign_in(
+        client,
+        password=TEST_PASSWORD,
+        headers={"X-Forwarded-For": "203.0.113.99"},
+    )
+    assert blocked.status_code == 429
+
+
+def test_trusted_proxy_rate_limits_by_forwarded_client_ip(
+    data_dir, clock, rate_limit_store
+) -> None:
+    config = AppConfig(
+        secret_key="local-test-secret-key-32-bytes-min",
+        admin_password_hash=TEST_HASH,
+        data_dir=data_dir,
+        session_cookie_secure=False,
+        trust_proxy=True,
+        require_data_mount=False,
+        log_level="WARNING",
+    )
+    application = create_app(config, clock=clock, rate_limit_store=rate_limit_store)
+    upgrade_to_head(config.database_url)
+    client = application.test_client()
+    for _ in range(MAX_FAILED_ATTEMPTS):
+        response = sign_in(
+            client,
+            password="nope",
+            headers={"X-Forwarded-For": "203.0.113.10"},
+        )
+        assert response.status_code == 200
+    blocked = sign_in(
+        client,
+        password=TEST_PASSWORD,
+        headers={"X-Forwarded-For": "203.0.113.10"},
+    )
+    assert blocked.status_code == 429
+    other = sign_in(
+        client,
+        password=TEST_PASSWORD,
+        headers={"X-Forwarded-For": "203.0.113.11"},
+    )
+    assert other.status_code == 302
+
+
 def test_secure_cookie_flag_is_emitted_when_configured(
     data_dir, clock, rate_limit_store
 ) -> None:

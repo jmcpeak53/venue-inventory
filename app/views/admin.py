@@ -125,6 +125,9 @@ def _is_admin() -> bool:
 
 
 def _client_ip() -> str:
+    # request.remote_addr is the TCP peer, or X-Forwarded-For when
+    # VENUE_INVENTORY_TRUST_PROXY=true (ProxyFix). Untrusted forwarded
+    # headers are ignored so clients cannot reset the login limiter.
     return request.remote_addr or "unknown"
 
 

@@ -15,7 +15,11 @@ def main() -> None:
     if password != confirm:
         print("Passwords do not match.", file=sys.stderr)
         raise SystemExit(1)
-    print(PasswordHasher().hash(password))
+    encoded = PasswordHasher().hash(password)
+    print(encoded)
+    print()
+    print("Compose-ready .env line (each $ is doubled):")
+    print("VENUE_INVENTORY_ADMIN_PASSWORD_HASH=" + encoded.replace("$", "$$"))
 
 
 if __name__ == "__main__":

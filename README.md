@@ -34,17 +34,43 @@ To create a new administrator password hash:
    docker compose run --rm --no-deps --entrypoint python web -m app.hash_password
    ```
 
-3. Type the password twice. The command prints an Argon2id hash.
-4. Put that hash in `.env` as `VENUE_INVENTORY_ADMIN_PASSWORD_HASH`.
-   Docker Compose treats `$` as a variable, so double every `$` in the
-   printed hash (`$argon2id$v=19$...` becomes `$$argon2id$$v=19$$...`).
-   Pasting the hash unchanged makes Compose mangle it and startup fails
-   with "must be an Argon2id encoded hash". To skip that editing, put
-   the printed hash in a file and set
-   `VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE` to that file's path instead.
+3. Type the password twice. The command prints the Argon2id hash and a
+   Compose-ready `.env` line with every `$` already doubled.
+4. Copy that `VENUE_INVENTORY_ADMIN_PASSWORD_HASH=...` line into `.env`.
+   Docker Compose treats `$` as a variable. If you paste the raw hash
+   instead of the Compose-ready line, double every `$`
+   (`$argon2id$v=19$...` becomes `$$argon2id$$v=19$$...`). Pasting the
+   hash unchanged makes Compose mangle it and startup fails with "must
+   be an Argon2id encoded hash".
+
+   To skip `$` doubling, put the printed hash in a file **inside the
+   container** and set `VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE` to that
+   container path. A path on your computer is not visible to the app.
+   One working place is the persistent `/data` directory:
+
+   - Save the printed hash as `admin-password.hash` in this folder.
+   - Start the app if it is not already running:
+     `docker compose up --build --wait`
+   - Copy the file into the data volume:
+     `docker compose cp admin-password.hash web:/data/admin-password.hash`
+   - In `.env`, set
+     `VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE=/data/admin-password.hash`
+
+   When the file variable is set, it is used instead of the inline hash.
 5. Restart with `docker compose up --build --wait`.
 
 The application never stores the password or the hash in SQLite.
+
+Sign-in is limited to five failed attempts per client IP in a 15-minute
+window. The default Compose file publishes port 8080 with
+`VENUE_INVENTORY_TRUST_PROXY=false`. Docker's published-port proxy then
+often presents every visitor as the same bridge address, so those five
+failures pause sign-in for every administrator until the window expires,
+and logs show that gateway address rather than the real client. Set
+`VENUE_INVENTORY_TRUST_PROXY=true` only when a trusted HTTP reverse
+proxy (Caddy, nginx) is in front and sets `X-Forwarded-For` and
+`X-Forwarded-Proto`. Leave it false for the published-port setup;
+otherwise a visitor could fake those headers and bypass the limiter.
 
 ## Running locally
 

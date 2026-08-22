@@ -60,6 +60,26 @@ def test_admin_hash_file_is_accepted(tmp_path: Path) -> None:
     assert config.admin_password_hash == TEST_HASH
 
 
+def test_empty_hash_file_env_uses_inline_hash(tmp_path: Path) -> None:
+    env = _valid_env(tmp_path / "data")
+    env["VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE"] = ""
+    config = AppConfig.from_environ(env)
+    assert config.admin_password_hash == TEST_HASH
+
+
+def test_admin_hash_file_overrides_inline_hash(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    hash_file = tmp_path / "admin-password.hash"
+    hash_file.write_text(TEST_HASH, encoding="utf-8")
+    env = _valid_env(data_dir)
+    env["VENUE_INVENTORY_ADMIN_PASSWORD_HASH"] = PasswordHasher(
+        time_cost=1, memory_cost=8, parallelism=1
+    ).hash("other-password")
+    env["VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE"] = str(hash_file)
+    config = AppConfig.from_environ(env)
+    assert config.admin_password_hash == TEST_HASH
+
+
 def test_missing_admin_hash_file_is_rejected(tmp_path: Path) -> None:
     env = _valid_env(tmp_path / "data")
     del env["VENUE_INVENTORY_ADMIN_PASSWORD_HASH"]
