@@ -1,0 +1,16 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Run formatting, lint, tests, and migration checks
+        run: docker compose run --build --rm web ./scripts/verify.sh

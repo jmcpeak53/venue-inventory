@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p class="eyebrow"><span class="status">Prototype online</span></p>
+    <h1>Venue Inventory</h1>
+    <p>
+      A self-hosted catalog and booking-selection workspace. Sign in with the
+      shared administrator password to open the dashboard.
+    </p>
+    <p>
+      <a class="button" href="{{ url_for('admin.login') }}">Administrator sign-in</a>
+    </p>
+  </section>
+{% endblock %}

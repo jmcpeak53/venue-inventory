@@ -8,8 +8,9 @@ container with the existing Needleminder application.
 
 - Public URL: `http://5.78.222.116:8080/`
 - Health check: `http://5.78.222.116:8080/healthz`
+- Readiness check: `http://5.78.222.116:8080/readyz`
 - VPS checkout: `/opt/venue-inventory`
-- Container: `venue-inventory`
+- Compose service: `web`
 - Git branch: `main`
 
 The prototype is intentionally served over plain HTTP on a dedicated port.

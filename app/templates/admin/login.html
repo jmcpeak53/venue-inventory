@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Administrator sign-in — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p class="eyebrow">Administrator</p>
+    <h1>Sign in</h1>
+    <p>Use the shared administrator password configured for this installation.</p>
+    {% if error %}
+      <p class="alert" id="login-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin.login_submit') }}" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="field">
+        <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          required
+          {% if error %}aria-invalid="true" aria-describedby="login-error"{% endif %}
+        >
+      </p>
+      <p class="actions">
+        <button type="submit">Sign in</button>
+      </p>
+    </form>
+  </section>
+{% endblock %}
