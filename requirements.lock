@@ -32,6 +32,8 @@ markupsafe==3.0.3
     #   jinja2
     #   mako
     #   werkzeug
+pillow==12.3.0
+    # via venue-inventory
 pycparser==3.0 ; implementation_name != 'PyPy'
     # via cffi
 sqlalchemy==2.0.52

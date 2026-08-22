@@ -9,6 +9,7 @@ dependencies = [
     "argon2-cffi",
     "flask",
     "gunicorn",
+    "pillow",
     "sqlalchemy",
 ]
 

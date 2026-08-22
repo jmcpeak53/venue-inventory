@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ item.name }} — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel form-panel">
+    <p class="eyebrow">Administrator catalog</p>
+    <h1>Delete item?</h1>
+    <p>
+      This permanently deletes <strong>{{ item.name }}</strong>{% if item.image_filename %}
+      and its stored image{% endif %}. This action cannot be undone.
+    </p>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('admin.item_delete', item_id=item.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-actions">
+        <button class="danger-button" type="submit">Delete item permanently</button>
+        <a class="text-action" href="{{ url_for('admin.item_detail', item_id=item.id) }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

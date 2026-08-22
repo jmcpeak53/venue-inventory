@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.name }} — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel detail-panel">
+    <p class="eyebrow">Administrator catalog</p>
+    <div class="page-heading">
+      <h1>{{ item.name }}</h1>
+      {% if item.is_visible %}
+        <span class="badge visible">Visible</span>
+      {% else %}
+        <span class="badge hidden">Hidden</span>
+      {% endif %}
+    </div>
+
+    {% if item.image_filename %}
+      <img class="item-image" src="{{ url_for('pages.image', filename=item.image_filename) }}" alt="{{ item.name }}">
+    {% else %}
+      <div class="image-placeholder item-image" role="img" aria-label="No image available">No image</div>
+    {% endif %}
+
+    <dl class="item-details">
+      <div><dt>Stock quantity</dt><dd>{{ item.stock_quantity }}</dd></div>
+      <div><dt>Visibility</dt><dd>{% if item.is_visible %}Shown in the catalog{% else %}Hidden from the catalog{% endif %}</dd></div>
+      {% if item.description %}<div><dt>Description</dt><dd class="preserve-lines">{{ item.description }}</dd></div>{% endif %}
+    </dl>
+
+    <div class="form-actions">
+      <a class="button" href="{{ url_for('admin.item_edit', item_id=item.id) }}">Edit item</a>
+      <form class="inline-form" method="post" action="{{ url_for('admin.item_toggle_visibility', item_id=item.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="secondary-button" type="submit">{% if item.is_visible %}Hide item{% else %}Show item{% endif %}</button>
+      </form>
+      <a class="text-action danger-text" href="{{ url_for('admin.item_delete_confirm', item_id=item.id) }}">Delete item</a>
+    </div>
+    <p><a class="text-action" href="{{ url_for('admin.item_list') }}">Back to catalog</a></p>
+  </section>
+{% endblock %}

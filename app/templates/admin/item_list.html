@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Catalog — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel catalog-panel">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Administrator</p>
+        <h1>Catalog</h1>
+      </div>
+      <a class="button compact-button" href="{{ url_for('admin.item_new') }}">Add item</a>
+    </div>
+
+    <form class="catalog-filters" method="get" action="{{ url_for('admin.item_list') }}">
+      <div class="field compact-field">
+        <label for="catalog-search">Search catalog</label>
+        <input id="catalog-search" name="q" type="search" value="{{ query_text }}" autocomplete="off">
+      </div>
+      <div class="field compact-field">
+        <label for="visibility">Show</label>
+        <select id="visibility" name="visibility">
+          <option value="all" {% if visibility == 'all' %}selected{% endif %}>All items</option>
+          <option value="visible" {% if visibility == 'visible' %}selected{% endif %}>Visible items</option>
+          <option value="hidden" {% if visibility == 'hidden' %}selected{% endif %}>Hidden items</option>
+        </select>
+      </div>
+      <button class="compact-button" type="submit">Apply</button>
+    </form>
+
+    {% if items %}
+      <div class="catalog-list">
+        {% for item in items %}
+          <article class="catalog-row">
+            {% if item.image_filename %}
+              <img class="catalog-thumbnail" src="{{ url_for('pages.image', filename=item.image_filename) }}" alt="{{ item.name }}">
+            {% else %}
+              <div class="image-placeholder catalog-thumbnail" role="img" aria-label="No image available">No image</div>
+            {% endif %}
+            <div class="catalog-summary">
+              <div class="catalog-title-row">
+                <h2><a href="{{ url_for('admin.item_detail', item_id=item.id) }}">{{ item.name }}</a></h2>
+                {% if item.is_visible %}
+                  <span class="badge visible">Visible</span>
+                {% else %}
+                  <span class="badge hidden">Hidden</span>
+                {% endif %}
+              </div>
+              <p class="item-quantity">{{ item.stock_quantity }} in stock</p>
+              {% if item.description %}<p class="item-description">{{ item.description }}</p>{% endif %}
+            </div>
+            <a class="text-action" href="{{ url_for('admin.item_edit', item_id=item.id) }}">Edit<span class="visually-hidden"> {{ item.name }}</span></a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">No catalog items match these filters.</p>
+    {% endif %}
+  </section>
+{% endblock %}

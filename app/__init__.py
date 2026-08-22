@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from flask import Flask, abort, g, render_template, request
 from sqlalchemy import select
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.clock import Clock, SystemClock
 from app.config import AppConfig
 from app.csrf import csrf_token_is_valid, generate_csrf_token
 from app.db import create_engine_for_app, get_session, init_db
+from app.images import MAX_UPLOAD_BYTES
 from app.logging import configure_logging
 from app.models import WebSession
 from app.rate_limit import MemoryRateLimitStore, RateLimiter, RateLimitStore
@@ -27,6 +29,9 @@ def create_app(
     app = Flask(__name__)
     app.config["SECRET_KEY"] = config.secret_key
     app.config["APP_CONFIG"] = config
+    # Leave multipart overhead room while image handling enforces the exact
+    # 10 MB file limit before decoding.
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES + 1024 * 1024
 
     if config.trust_proxy:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
@@ -108,6 +113,18 @@ def create_app(
     def add_security_headers(response):
         return security_headers(response)
 
+    @app.teardown_request
+    def close_uploaded_files(_error: BaseException | None) -> None:
+        # Werkzeug keeps multipart streams on the request. Closing them at the
+        # request boundary releases spooled upload files on both normal and
+        # validation-error paths.
+        try:
+            request.close()
+        except RequestEntityTooLarge:
+            # Parsing has already been rejected before a multipart stream was
+            # created, so there is nothing to close.
+            pass
+
     @app.errorhandler(403)
     def forbidden(_error):
         return render_template("errors/forbidden.html"), 403
@@ -115,5 +132,9 @@ def create_app(
     @app.errorhandler(404)
     def not_found(_error):
         return render_template("errors/not_found.html"), 404
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def request_too_large(_error):
+        return render_template("errors/request_too_large.html"), 413
 
     return app
