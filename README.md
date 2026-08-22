@@ -49,5 +49,8 @@ health checks, security boundary, and recovery commands.
 | `public/` | Static web application files. |
 | `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
 | `docs/deployment.md` | VPS deployment and recovery runbook. |
+| `docs/prd/` | Approved product requirements used to derive implementation work. |
 | `docs/plans/` | Implementation plans for focused, agent-ready work. |
+| `docs/agents/` | Issue tracker, triage label, and domain-document conventions. |
+| `.claude/skills/` | Project-local planning skills sourced from Slipstream. |
 | `AGENTS.md` / `CLAUDE.md` | Working instructions for coding agents. |

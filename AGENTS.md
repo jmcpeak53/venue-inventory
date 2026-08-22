@@ -22,3 +22,19 @@ When a command is likely to be reused, request elevated execution up front with 
 Review the README.md as the first step of any prompt to ground yourself in the project.
 
 Update `README.md` when setup steps, project structure, commands, or the v1 feature set changes. Keep it scoped to: what the app is, setup, running, testing, and where to find deeper docs.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in GitHub Issues for `jmcpeak53/venue-inventory`. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical Slipstream triage labels. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository. See `docs/agents/domain.md`.

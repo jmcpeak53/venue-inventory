@@ -1,0 +1,7 @@
+.env
+.venv/
+.orchestration-bodies/
+factory.yaml
+__pycache__/
+*.py[cod]
+
