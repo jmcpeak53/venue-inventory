@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <title>Venue Inventory</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #111a17;
+        color: #eef6f1;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+        background:
+          radial-gradient(circle at 20% 15%, rgb(67 170 139 / 20%), transparent 30rem),
+          radial-gradient(circle at 80% 85%, rgb(240 174 92 / 14%), transparent 32rem),
+          #111a17;
+      }
+
+      main {
+        width: min(42rem, 100%);
+        padding: clamp(2rem, 7vw, 4rem);
+        border: 1px solid rgb(238 246 241 / 12%);
+        border-radius: 1.5rem;
+        background: rgb(24 38 33 / 86%);
+        box-shadow: 0 2rem 5rem rgb(0 0 0 / 32%);
+      }
+
+      .eyebrow {
+        margin: 0 0 1rem;
+        color: #75d3b2;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.5rem, 9vw, 5rem);
+        line-height: 0.95;
+        letter-spacing: -0.055em;
+      }
+
+      p:last-child {
+        max-width: 32rem;
+        margin: 1.5rem 0 0;
+        color: #b8c8c0;
+        font-size: 1.05rem;
+        line-height: 1.65;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .status::before {
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: #75d3b2;
+        box-shadow: 0 0 0.8rem #75d3b2;
+        content: "";
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow"><span class="status">Prototype online</span></p>
+      <h1>Hello, world.</h1>
+      <p>Venue Inventory has a home. This standalone deployment is ready for ongoing development without changing the existing Needleminder application.</p>
+    </main>
+  </body>
+</html>

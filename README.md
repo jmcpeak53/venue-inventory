@@ -4,20 +4,50 @@ A self-hosted web app for managing venue inventory.
 
 ## Status
 
-This repository is an initial project scaffold. The application stack, setup,
-and test commands will be added with the first implementation plan.
+The initial standalone prototype is live. It serves a static hello-world page
+from an Nginx container and includes a health-checked VPS deployment workflow.
+
+## Running locally
+
+Requirements: Docker with Docker Compose.
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8080/`. Stop it with `docker compose down`.
+
+## Testing
+
+Build and start the service, then check its health endpoint:
+
+```bash
+docker compose up -d --build
+curl --fail http://localhost:8080/healthz
+docker compose down
+```
 
 ## Deployment
 
-The production app is intended to run on the existing `needleminder.app`
-domain. The parent network map records `prod-vps-01` (Tailscale
-`100.77.40.40`) as the public-facing VPS, currently using
-`caddy-needle-minder` for `needleminder.app`. That entry is marked `[M]` in the
-network map, so verify the live configuration before deploying or changing it.
+The prototype runs independently at `http://5.78.222.116:8080/` on
+`prod-vps-01`. It does not change the existing Caddy container or the
+Needleminder project serving ports 80 and 443.
+
+After pushing a commit to GitHub, deploy it from this repository with:
+
+```bash
+./scripts/deploy-vps.sh
+```
+
+See [docs/deployment.md](docs/deployment.md) for the exact agent workflow,
+health checks, security boundary, and recovery commands.
 
 ## Repository map
 
 | Path | Purpose |
 |---|---|
+| `public/` | Static web application files. |
+| `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
+| `docs/deployment.md` | VPS deployment and recovery runbook. |
 | `docs/plans/` | Implementation plans for focused, agent-ready work. |
 | `AGENTS.md` / `CLAUDE.md` | Working instructions for coding agents. |
