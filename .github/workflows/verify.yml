@@ -13,4 +13,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run formatting, lint, tests, and migration checks
-        run: docker compose run --build --rm web ./scripts/verify.sh
+        run: docker compose run --build --rm --no-deps verify

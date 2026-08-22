@@ -69,10 +69,12 @@ the saved database volume.
 GitHub Actions and Slipstream run the same command:
 
 ```bash
-docker compose run --build --rm web ./scripts/verify.sh
+docker compose run --build --rm --no-deps verify
 ```
 
-That runs formatting, linting, tests, and migration checks inside Docker.
+That runs formatting, linting, tests, and migration checks in the
+verification image. Local `docker compose up` and VPS deploys use the
+`web` service, which is the production runtime image.
 
 On a machine with Docker, this host script runs those same checks and then
 starts a throwaway Compose project to probe liveness, readiness, and data
@@ -94,8 +96,8 @@ after container replacement:
 | `scripts/verify.sh` | Formatting, lint, tests, and (on the host) container health probes. |
 | `scripts/entrypoint.sh` | Validates configuration and applies migrations before Gunicorn. |
 | `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
-| `compose.yaml` | Local and VPS Compose service, health check, and data volume. |
-| `Dockerfile` | Non-root Flask/Gunicorn image plus a verification stage. |
+| `compose.yaml` | Local and VPS `web` runtime service, plus a `verify` profile for checks. |
+| `Dockerfile` | Non-root Flask/Gunicorn runtime image plus a verification stage. |
 | `requirements.lock` | Locked runtime dependencies. |
 | `requirements-dev.lock` | Locked runtime plus pytest and ruff. |
 | `docs/deployment.md` | VPS deployment and recovery runbook. |

@@ -19,7 +19,7 @@ def data_dir_is_ready(config: AppConfig) -> tuple[bool, str]:
     probe = path / ".write-probe"
     try:
         probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
+        probe.unlink(missing_ok=True)
     except OSError:
         return False, "not_writable"
     return True, "ok"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 
 from app.config import AppConfig
 from app.security import CONTENT_SECURITY_POLICY
@@ -49,6 +50,23 @@ def test_readiness_fails_when_data_dir_is_not_writable(
     response = client.get("/readyz")
     assert response.status_code == 503
     assert response.get_data(as_text=True) == "not ready\n"
+
+
+def test_readiness_succeeds_when_write_probe_is_already_removed(
+    client, monkeypatch
+) -> None:
+    original_write_text = Path.write_text
+
+    def write_then_remove(self, *args, **kwargs):
+        result = original_write_text(self, *args, **kwargs)
+        if self.name == ".write-probe":
+            self.unlink(missing_ok=True)
+        return result
+
+    monkeypatch.setattr(Path, "write_text", write_then_remove)
+    response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "ok\n"
 
 
 def test_readiness_fails_when_data_dir_is_not_a_directory(

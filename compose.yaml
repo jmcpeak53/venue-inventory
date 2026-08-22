@@ -2,12 +2,11 @@ services:
   web:
     build:
       context: .
-      target: verify
+      target: runtime
     restart: unless-stopped
     ports:
       - "${VENUE_INVENTORY_BIND_ADDRESS:-0.0.0.0}:${VENUE_INVENTORY_PORT:-8080}:8080"
     environment:
-      PYTEST_ADDOPTS: "-p no:cacheprovider"
       VENUE_INVENTORY_SECRET_KEY: ${VENUE_INVENTORY_SECRET_KEY:-local-dev-secret-key-please-change-32}
       VENUE_INVENTORY_ADMIN_PASSWORD_HASH: "${VENUE_INVENTORY_ADMIN_PASSWORD_HASH:-$$argon2id$$v=19$$m=65536,t=3,p=4$$p+GWcgPvN61qwVQskNrWfw$$A2jSd5WGZ4OS1b+eTkqth1qjiWAhMaLmpc7khoup98Q}"
       VENUE_INVENTORY_DATA_DIR: /data
@@ -29,6 +28,15 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+
+  verify:
+    profiles: [verify]
+    build:
+      context: .
+      target: verify
+    entrypoint: ["./scripts/verify.sh"]
+    environment:
+      PYTEST_ADDOPTS: "-p no:cacheprovider"
 
 volumes:
   venue-inventory-data:

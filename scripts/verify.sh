@@ -30,7 +30,7 @@ project="${VENUE_INVENTORY_VERIFY_PROJECT:-venue-inventory-verify}"
 port="${VENUE_INVENTORY_VERIFY_PORT:-18080}"
 
 echo "==> Running formatting, lint, tests, and migration checks"
-docker compose run --build --rm web ./scripts/verify.sh --in-container
+docker compose run --build --rm --no-deps verify --in-container
 
 echo "==> Building and probing the application container"
 export VENUE_INVENTORY_PORT="$port"
@@ -62,5 +62,9 @@ docker compose -p "$project" up --force-recreate --wait --wait-timeout 60
 curl --fail --silent --show-error "http://127.0.0.1:${port}/readyz" >/dev/null
 docker compose -p "$project" exec -T web python -c \
   "from pathlib import Path; p = Path('/data/venue-inventory.sqlite3'); assert p.is_file() and p.stat().st_size > 0, p"
+
+echo "==> Confirming the production image does not include verification tooling"
+docker compose -p "$project" exec -T web python -c \
+  "import importlib.util; from pathlib import Path; assert not Path('/app/tests').exists(); assert not Path('/app/scripts/verify.sh').exists(); assert importlib.util.find_spec('pytest') is None; assert importlib.util.find_spec('ruff') is None"
 
 echo "==> Verification passed"
