@@ -1,0 +1,39 @@
+[project]
+name = "venue-inventory"
+version = "0.1.0"
+description = "Self-hosted venue inventory catalog and booking-selection app."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic",
+    "argon2-cffi",
+    "flask",
+    "gunicorn",
+    "sqlalchemy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = ["-q", "--strict-markers"]
+filterwarnings = ["error"]
+markers = [
+    "container: tests that build and probe the Docker image",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p class="eyebrow">Not found</p>
+    <h1>That page is not available.</h1>
+    <p><a href="{{ url_for('pages.home') }}">Return to the home page</a></p>
+  </section>
+{% endblock %}

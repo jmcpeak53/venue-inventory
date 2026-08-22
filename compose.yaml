@@ -2,14 +2,42 @@ services:
   web:
     build:
       context: .
-    container_name: venue-inventory
+      target: runtime
     restart: unless-stopped
     ports:
       - "${VENUE_INVENTORY_BIND_ADDRESS:-0.0.0.0}:${VENUE_INVENTORY_PORT:-8080}:8080"
+    environment:
+      VENUE_INVENTORY_SECRET_KEY: ${VENUE_INVENTORY_SECRET_KEY:-local-dev-secret-key-please-change-32}
+      VENUE_INVENTORY_ADMIN_PASSWORD_HASH: "${VENUE_INVENTORY_ADMIN_PASSWORD_HASH:-$$argon2id$$v=19$$m=65536,t=3,p=4$$p+GWcgPvN61qwVQskNrWfw$$A2jSd5WGZ4OS1b+eTkqth1qjiWAhMaLmpc7khoup98Q}"
+      VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE: "${VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE:-}"
+      VENUE_INVENTORY_DATA_DIR: /data
+      VENUE_INVENTORY_SESSION_COOKIE_SECURE: ${VENUE_INVENTORY_SESSION_COOKIE_SECURE:-false}
+      VENUE_INVENTORY_TRUST_PROXY: ${VENUE_INVENTORY_TRUST_PROXY:-false}
+      VENUE_INVENTORY_REQUIRE_DATA_MOUNT: ${VENUE_INVENTORY_REQUIRE_DATA_MOUNT:-true}
+      VENUE_INVENTORY_LOG_LEVEL: ${VENUE_INVENTORY_LOG_LEVEL:-INFO}
+    volumes:
+      - venue-inventory-data:/data
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/healthz"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz').read()",
+        ]
       interval: 10s
       timeout: 3s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 20s
 
+  verify:
+    profiles: [verify]
+    build:
+      context: .
+      target: verify
+    entrypoint: ["./scripts/verify.sh"]
+    environment:
+      PYTEST_ADDOPTS: "-p no:cacheprovider"
+
+volumes:
+  venue-inventory-data:
