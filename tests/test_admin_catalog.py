@@ -396,6 +396,36 @@ def test_request_over_the_server_limit_has_a_safe_response(client: FlaskClient) 
     assert "10 MB or smaller" in response.get_data(as_text=True)
 
 
+def test_database_failure_removes_a_new_upload_and_creates_no_item(
+    app, app_config, client
+) -> None:
+    assert sign_in(client).status_code == 302
+
+    def fail_inventory_commit(session: Session) -> None:
+        if session.new and any(isinstance(row, InventoryItem) for row in session.new):
+            raise SQLAlchemyError("forced database failure")
+
+    from sqlalchemy import event
+
+    event.listen(Session, "before_commit", fail_inventory_commit)
+    try:
+        response = submit_item(
+            client,
+            "/admin/items",
+            name="New item",
+            quantity="1",
+            image=(image_bytes("PNG"), "new.png", "image/png"),
+        )
+    finally:
+        event.remove(Session, "before_commit", fail_inventory_commit)
+
+    assert response.status_code == 200
+    assert "could not be saved" in response.get_data(as_text=True)
+    with app.app_context():
+        assert get_session().execute(select(InventoryItem)).scalars().all() == []
+    assert list(image_directory(app_config.data_dir).glob("*.webp")) == []
+
+
 def test_database_failure_removes_a_new_upload_and_keeps_the_existing_record(
     app, app_config, client, monkeypatch
 ) -> None:
