@@ -268,7 +268,11 @@ def item_toggle_visibility(item_id: int):
         logger.exception(
             "Changing inventory item %s visibility could not commit.", item_id
         )
-        abort(500)
+        return render_template(
+            "admin/item_detail.html",
+            item=item,
+            error="The item visibility could not be changed. Try again.",
+        )
     return redirect(url_for("admin.item_detail", item_id=item.id))
 
 

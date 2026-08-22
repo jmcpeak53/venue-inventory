@@ -14,6 +14,8 @@
       {% endif %}
     </div>
 
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+
     {% if item.image_filename %}
       <img class="item-image" src="{{ url_for('pages.image', filename=item.image_filename) }}" alt="{{ item.name }}">
     {% else %}

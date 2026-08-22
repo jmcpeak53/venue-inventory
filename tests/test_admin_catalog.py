@@ -149,6 +149,41 @@ def test_edit_visibility_toggle_and_confirmed_delete(app, client: FlaskClient) -
         assert get_session().get(InventoryItem, 1) is None
 
 
+def test_visibility_toggle_database_failure_keeps_item_usable(
+    app, client: FlaskClient
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert (
+        submit_item(client, "/admin/items", name="Table", quantity="6").status_code
+        == 302
+    )
+
+    def fail_inventory_commit(session: Session) -> None:
+        if session.dirty and any(
+            isinstance(row, InventoryItem) for row in session.dirty
+        ):
+            raise SQLAlchemyError("forced database failure")
+
+    from sqlalchemy import event
+
+    event.listen(Session, "before_commit", fail_inventory_commit)
+    try:
+        detail = client.get("/admin/items/1")
+        response = client.post(
+            "/admin/items/1/visibility",
+            data={"csrf_token": csrf_token(detail)},
+        )
+    finally:
+        event.remove(Session, "before_commit", fail_inventory_commit)
+
+    assert response.status_code == 200
+    assert "item visibility could not be changed" in response.get_data(as_text=True)
+    with app.app_context():
+        item = get_session().get(InventoryItem, 1)
+        assert item is not None
+        assert item.is_visible is True
+
+
 def test_image_normalization_orientation_and_public_route(
     app, app_config, client
 ) -> None:
