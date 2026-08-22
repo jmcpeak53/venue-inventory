@@ -32,8 +32,13 @@ if [[ -d "$deploy_directory/.git" ]]; then
   fi
 
   git fetch origin "$deploy_ref"
-  git switch "$deploy_ref"
-  git pull --ff-only origin "$deploy_ref"
+
+  if git show-ref --verify --quiet "refs/heads/$deploy_ref"; then
+    git switch "$deploy_ref"
+    git merge --ff-only FETCH_HEAD
+  else
+    git switch --create "$deploy_ref" FETCH_HEAD
+  fi
 elif [[ -e "$deploy_directory" ]]; then
   echo "Deployment stopped: $deploy_directory exists but is not a Git checkout." >&2
   exit 1
@@ -43,23 +48,14 @@ else
   cd "$deploy_directory"
 fi
 
-VENUE_INVENTORY_PORT="$public_port" docker compose up -d --build --remove-orphans
+if ! VENUE_INVENTORY_PORT="$public_port" docker compose up -d --build --remove-orphans --wait --wait-timeout 60; then
+  echo "Deployment did not become healthy within 60 seconds." >&2
+  docker compose ps >&2
+  docker compose logs --tail=100 web >&2
+  exit 1
+fi
 
-for attempt in {1..30}; do
-  if curl --fail --silent --show-error "http://127.0.0.1:${public_port}/healthz" >/dev/null; then
-    echo "Deployment is healthy on port ${public_port}."
-    docker compose ps
-    exit 0
-  fi
-
-  if (( attempt == 30 )); then
-    echo "Deployment did not become healthy within 60 seconds." >&2
-    docker compose ps >&2
-    docker compose logs --tail=100 web >&2
-    exit 1
-  fi
-
-  sleep 2
-done
+curl --fail --silent --show-error "http://127.0.0.1:${public_port}/healthz" >/dev/null
+echo "Deployment is healthy on port ${public_port}."
+docker compose ps
 REMOTE_SCRIPT
-

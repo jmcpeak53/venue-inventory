@@ -33,7 +33,7 @@ repository root, a coding agent should:
 4. Open `http://5.78.222.116:8080/` and confirm the changed page appears.
 
 The script connects through SSH, clones the public repository on its first
-run, and subsequently uses a fast-forward-only Git pull. It rebuilds and
+run, and subsequently uses a fast-forward-only Git update. It rebuilds and
 restarts only the `venue-inventory` container, then waits up to 60 seconds for
 the health endpoint. It refuses to overwrite uncommitted files on the VPS.
 

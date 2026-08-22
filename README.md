@@ -22,7 +22,7 @@ Open `http://localhost:8080/`. Stop it with `docker compose down`.
 Build and start the service, then check its health endpoint:
 
 ```bash
-docker compose up -d --build
+docker compose up -d --build --wait --wait-timeout 60
 curl --fail http://localhost:8080/healthz
 docker compose down
 ```
