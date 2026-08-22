@@ -50,7 +50,9 @@ def create_app(
     @app.before_request
     def load_web_session() -> None:
         g.web_session = None
-        if request.path == "/healthz" or request.path.startswith("/static/"):
+        if request.path in {"/healthz", "/readyz"} or request.path.startswith(
+            "/static/"
+        ):
             return
         token = request.cookies.get(SESSION_COOKIE_NAME)
         if not token:

@@ -31,6 +31,21 @@ def test_readiness_succeeds_when_data_and_schema_are_ready(client) -> None:
     assert response.get_data(as_text=True) == "ok\n"
 
 
+def test_readiness_ignores_session_cookie(client, monkeypatch) -> None:
+    import app as app_module
+
+    def fail_if_session_is_loaded():
+        raise AssertionError("readiness must not load a web session")
+
+    monkeypatch.setattr(app_module, "get_session", fail_if_session_is_loaded)
+    client.set_cookie("venue_session", "stale-token")
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    assert response.get_data(as_text=True) == "ok\n"
+
+
 def test_readiness_fails_when_database_file_is_missing(
     app, client, app_config: AppConfig
 ) -> None:
