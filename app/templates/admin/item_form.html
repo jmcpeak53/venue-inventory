@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{% if item %}Edit {{ item.name }}{% else %}Add catalog item{% endif %} — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel form-panel">
+    <p class="eyebrow">Administrator catalog</p>
+    <h1>{% if item %}Edit item{% else %}Add item{% endif %}</h1>
+    <p>Names and stock quantities are required. Descriptions and images are optional.</p>
+
+    {% if errors.get('form') %}<div class="alert" role="alert">{{ errors['form'] }}</div>{% endif %}
+
+    <form method="post" enctype="multipart/form-data" action="{% if item %}{{ url_for('admin.item_update', item_id=item.id) }}{% else %}{{ url_for('admin.item_create') }}{% endif %}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="field">
+        <label for="name">Item name</label>
+        <input id="name" name="name" type="text" maxlength="200" required value="{{ values['name'] }}" {% if errors.get('name') %}aria-invalid="true" aria-describedby="name-error"{% endif %}>
+        {% if errors.get('name') %}<p class="field-error" id="name-error">{{ errors['name'] }}</p>{% endif %}
+      </div>
+
+      <div class="field">
+        <label for="stock_quantity">Stock quantity</label>
+        <input id="stock_quantity" name="stock_quantity" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="10" required value="{{ values['stock_quantity'] }}" {% if errors.get('stock_quantity') %}aria-invalid="true" aria-describedby="stock-quantity-error"{% endif %}>
+        {% if errors.get('stock_quantity') %}<p class="field-error" id="stock-quantity-error">{{ errors['stock_quantity'] }}</p>{% endif %}
+      </div>
+
+      <div class="field">
+        <label for="description">Description <span class="muted">(optional)</span></label>
+        <textarea id="description" name="description" maxlength="2000" rows="5" {% if errors.get('description') %}aria-invalid="true" aria-describedby="description-error"{% endif %}>{{ values['description'] or '' }}</textarea>
+        {% if errors.get('description') %}<p class="field-error" id="description-error">{{ errors['description'] }}</p>{% endif %}
+      </div>
+
+      <fieldset class="field checkbox-field">
+        <legend>Catalog visibility</legend>
+        <label class="checkbox-label" for="is_visible">
+          <input id="is_visible" name="is_visible" type="checkbox" value="1" {% if values['is_visible'] %}checked{% endif %}>
+          Show this item in the catalog
+        </label>
+      </fieldset>
+
+      <div class="field">
+        <label for="image">Image <span class="muted">(optional)</span></label>
+        <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp" {% if errors.get('image') %}aria-invalid="true" aria-describedby="image-error"{% endif %}>
+        <p class="field-hint">JPEG, PNG, or WebP up to 10 MB. Images are stored as a metadata-free WebP.</p>
+        {% if errors.get('image') %}<p class="field-error" id="image-error">{{ errors['image'] }}</p>{% endif %}
+      </div>
+
+      {% if item %}
+        <div class="current-image">
+          {% if item.image_filename %}
+            <img class="item-image-preview" src="{{ url_for('pages.image', filename=item.image_filename) }}" alt="Current image for {{ item.name }}">
+            <label class="checkbox-label" for="remove_image">
+              <input id="remove_image" name="remove_image" type="checkbox" value="1">
+              Remove the current image
+            </label>
+          {% else %}
+            <div class="image-placeholder item-image-preview" role="img" aria-label="No image available">No image</div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <div class="form-actions">
+        <button type="submit">{% if item %}Save changes{% else %}Create item{% endif %}</button>
+        <a class="text-action" href="{% if item %}{{ url_for('admin.item_detail', item_id=item.id) }}{% else %}{{ url_for('admin.item_list') }}{% endif %}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -28,7 +28,7 @@ def test_upgrade_from_empty_database_reaches_head_and_matches_metadata(
     )
     revision = upgrade_to_head(config.database_url)
     assert revision == head_revision()
-    assert revision == "0001_web_sessions"
+    assert revision == "0002_inventory_items"
     assert config.database_path.is_file()
 
     engine = create_engine_for_app(config.database_url)

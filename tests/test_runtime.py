@@ -35,7 +35,7 @@ def test_prepare_runtime_logs_head_revision(
     )
     output = capsys.readouterr().out
     assert "migrations_applied" in output
-    assert "0001_web_sessions" in output
+    assert "0002_inventory_items" in output
 
 
 def test_prepare_runtime_skips_migration_when_data_dir_missing(

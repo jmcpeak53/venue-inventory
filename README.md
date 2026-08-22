@@ -1,15 +1,15 @@
 # Venue Inventory
 
 A self-hosted web app for managing venue inventory. This slice is a Flask
-application with SQLite persistence, a protected administrator dashboard,
-and container health checks.
+application with SQLite persistence, a protected administrator catalog, and
+container health checks.
 
 ## Status
 
 The static hello-world prototype has been replaced by a Flask/Gunicorn
 container. You can start it, sign in with the shared administrator password,
-view the empty dashboard, sign out, and confirm that readiness is healthy.
-Catalog items, bookings, and HTTPS come in later slices.
+create and search catalog items, add optional normalized images, sign out, and
+confirm that readiness is healthy. Bookings and HTTPS come in later slices.
 
 ## Setup
 
@@ -20,7 +20,8 @@ without extra files:
 
 - Administrator password: `local-admin-password`
 - Session cookies are not marked `Secure` (this machine is serving HTTP)
-- SQLite and session rows are stored in the `venue-inventory-data` Docker volume
+- SQLite, session rows, and normalized catalog images are stored in the
+  `venue-inventory-data` Docker volume
 
 Those defaults are only for local use. Before any shared installation, copy
 `.env.example` to `.env` and replace the secret key and password hash.
@@ -84,9 +85,12 @@ Open `http://localhost:8080/`.
 
 1. Choose **Administrator sign-in**.
 2. Enter `local-admin-password` (or the password you configured).
-3. Confirm the empty dashboard appears.
-4. Choose **Sign out**.
-5. Confirm the dashboard redirects back to sign-in.
+3. Choose **Manage catalog**, then add an item with a name and whole-number
+   stock quantity. An optional JPEG, PNG, or WebP image is normalized to WebP
+   and stored under the persistent data volume.
+4. Confirm the item appears in search, and use its detail page to edit, hide,
+   or delete it.
+5. Choose **Sign out** and confirm the dashboard redirects back to sign-in.
 
 Health URLs:
 
@@ -121,7 +125,7 @@ after container replacement:
 | Path | Purpose |
 |---|---|
 | `app/` | Flask application factory, configuration, persistence, and views. |
-| `app/templates/` | Jinja pages, including the administrator login and empty dashboard. |
+| `app/templates/` | Jinja pages for sign-in, dashboard, and catalog management. |
 | `app/static/css/` | Shared responsive CSS baseline. |
 | `migrations/` | Alembic schema history. The first revision creates `web_sessions`. |
 | `tests/` | HTTP-client tests for config, auth, health, and migrations. |

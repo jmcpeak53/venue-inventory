@@ -12,10 +12,13 @@
     <header class="site-header">
       <p class="brand"><a href="{{ url_for('pages.home') }}">Venue Inventory</a></p>
       {% if admin_authenticated %}
-        <form class="header-actions" method="post" action="{{ url_for('admin.logout') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit">Sign out</button>
-        </form>
+        <nav class="header-actions" aria-label="Administrator">
+          <a href="{{ url_for('admin.item_list') }}">Catalog</a>
+          <form method="post" action="{{ url_for('admin.logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Sign out</button>
+          </form>
+        </nav>
       {% endif %}
     </header>
     <main id="main">
