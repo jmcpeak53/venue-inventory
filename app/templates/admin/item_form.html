@@ -21,7 +21,7 @@
 
       <div class="field">
         <label for="stock_quantity">Stock quantity</label>
-        <input id="stock_quantity" name="stock_quantity" type="text" inputmode="numeric" pattern="[0-9]+" required value="{{ values['stock_quantity'] }}" {% if errors.get('stock_quantity') %}aria-invalid="true" aria-describedby="stock-quantity-error"{% endif %}>
+        <input id="stock_quantity" name="stock_quantity" type="text" inputmode="numeric" pattern="[0-9]+" maxlength="10" required value="{{ values['stock_quantity'] }}" {% if errors.get('stock_quantity') %}aria-invalid="true" aria-describedby="stock-quantity-error"{% endif %}>
         {% if errors.get('stock_quantity') %}<p class="field-error" id="stock-quantity-error">{{ errors['stock_quantity'] }}</p>{% endif %}
       </div>
 

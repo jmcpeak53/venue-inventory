@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import uuid
 import warnings
 from io import BytesIO
@@ -15,6 +16,7 @@ MAX_SOURCE_PIXELS = 20_000_000
 MAX_IMAGE_DIMENSION = 1600
 ALLOWED_FORMATS = frozenset({"JPEG", "PNG", "WEBP"})
 IMAGE_FILENAME_SUFFIX = ".webp"
+STALE_UPLOAD_SECONDS = 24 * 60 * 60
 
 
 class ImageValidationError(ValueError):
@@ -40,13 +42,9 @@ def normalize_upload(upload: FileStorage, data_dir: Path) -> str:
     encoded = _read_upload(upload)
     normalized = _decode_and_normalize(encoded)
     directory = image_directory(data_dir)
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise ImageValidationError("The image could not be stored. Try again.") from exc
-
     temporary_path: Path | None = None
     try:
+        directory.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             mode="w+b", dir=directory, prefix=".upload-", suffix=".tmp", delete=False
         ) as output:
@@ -84,6 +82,23 @@ def normalize_upload(upload: FileStorage, data_dir: Path) -> str:
                 temporary_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def remove_stale_uploads(data_dir: Path, *, now: float | None = None) -> None:
+    """Remove abandoned temporary uploads without touching active workers' files."""
+
+    directory = image_directory(data_dir)
+    cutoff = (time.time() if now is None else now) - STALE_UPLOAD_SECONDS
+    try:
+        candidates = tuple(directory.glob(".upload-*.tmp"))
+    except OSError:
+        return
+    for candidate in candidates:
+        try:
+            if candidate.stat().st_mtime < cutoff:
+                candidate.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def remove_normalized_image(data_dir: Path, filename: str) -> bool:

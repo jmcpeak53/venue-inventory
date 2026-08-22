@@ -9,7 +9,7 @@ from app.clock import Clock, SystemClock
 from app.config import AppConfig
 from app.csrf import csrf_token_is_valid, generate_csrf_token
 from app.db import create_engine_for_app, get_session, init_db
-from app.images import MAX_UPLOAD_BYTES
+from app.images import MAX_UPLOAD_BYTES, remove_stale_uploads
 from app.logging import configure_logging
 from app.models import WebSession
 from app.rate_limit import MemoryRateLimitStore, RateLimiter, RateLimitStore
@@ -25,6 +25,7 @@ def create_app(
 ) -> Flask:
     config = config or AppConfig.from_environ()
     configure_logging(config.log_level)
+    remove_stale_uploads(config.data_dir)
 
     app = Flask(__name__)
     app.config["SECRET_KEY"] = config.secret_key

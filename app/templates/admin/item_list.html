@@ -15,7 +15,8 @@
     <form class="catalog-filters" method="get" action="{{ url_for('admin.item_list') }}">
       <div class="field compact-field">
         <label for="catalog-search">Search catalog</label>
-        <input id="catalog-search" name="q" type="search" value="{{ query_text }}" autocomplete="off">
+        <input id="catalog-search" name="q" type="search" value="{{ query_text }}" autocomplete="off" aria-describedby="catalog-search-hint">
+        <p class="field-hint" id="catalog-search-hint">English letters are matched without regard to capitalization. Capitalization must match for accented letters.</p>
       </div>
       <div class="field compact-field">
         <label for="visibility">Show</label>

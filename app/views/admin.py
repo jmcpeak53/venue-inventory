@@ -43,6 +43,7 @@ SIGN_IN_FAILED = "Sign-in failed."
 MAX_ITEM_NAME_LENGTH = 200
 MAX_ITEM_DESCRIPTION_LENGTH = 2_000
 MAX_STOCK_QUANTITY = 2_147_483_647
+MAX_STOCK_QUANTITY_DIGITS = len(str(MAX_STOCK_QUANTITY))
 QUANTITY_RE = re.compile(r"[0-9]+")
 
 
@@ -194,7 +195,7 @@ def item_create():
         db_session.commit()
     except SQLAlchemyError:
         db_session.rollback()
-        _cleanup_image_after_commit(image_filename)
+        _remove_image_file(image_filename)
         logger.exception("Creating an inventory item could not be committed.")
         errors["form"] = "The item could not be saved. Try again."
         return _render_item_form(values=values, errors=errors)
@@ -244,13 +245,13 @@ def item_update(item_id: int):
         db_session.commit()
     except SQLAlchemyError:
         db_session.rollback()
-        _cleanup_image_after_commit(image_filename)
+        _remove_image_file(image_filename)
         logger.exception("Updating inventory item %s could not be committed.", item_id)
         errors["form"] = "The item could not be saved. Try again."
         return _render_item_form(item=item, values=values, errors=errors)
 
     if prior_image_filename and prior_image_filename != item.image_filename:
-        _cleanup_image_after_commit(prior_image_filename)
+        _remove_image_file(prior_image_filename)
     return redirect(url_for("admin.item_detail", item_id=item.id))
 
 
@@ -301,7 +302,7 @@ def item_delete(item_id: int):
         )
 
     if image_filename:
-        _cleanup_image_after_commit(image_filename)
+        _remove_image_file(image_filename)
     return redirect(url_for("admin.item_list"))
 
 
@@ -404,6 +405,8 @@ def _item_values_from_request() -> tuple[dict[str, object], dict[str, str]]:
         errors["stock_quantity"] = "Enter a stock quantity."
     elif QUANTITY_RE.fullmatch(quantity_raw) is None:
         errors["stock_quantity"] = "Stock quantity must be a nonnegative whole number."
+    elif len(quantity_raw) > MAX_STOCK_QUANTITY_DIGITS:
+        errors["stock_quantity"] = "Stock quantity is too large."
     else:
         quantity = int(quantity_raw)
         if quantity > MAX_STOCK_QUANTITY:
@@ -433,11 +436,11 @@ def _save_submitted_image() -> tuple[str | None, str | None]:
         upload.close()
 
 
-def _cleanup_image_after_commit(filename: str | None) -> None:
+def _remove_image_file(filename: str | None) -> None:
     if filename is None:
         return
     if not remove_normalized_image(current_app.config["APP_CONFIG"].data_dir, filename):
         logger.warning(
-            "Could not remove normalized inventory image after database commit.",
+            "Could not remove normalized inventory image file.",
             extra={"event": "inventory_image_cleanup_failed", "filename": filename},
         )

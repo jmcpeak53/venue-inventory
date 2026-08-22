@@ -69,6 +69,22 @@ def test_invalid_quantities_show_an_accessible_error(
         assert get_session().execute(select(InventoryItem)).scalars().all() == []
 
 
+@pytest.mark.parametrize("quantity", ["2147483648", "9" * 5_000])
+def test_excessively_large_quantities_are_rejected_before_integer_conversion(
+    app, client: FlaskClient, quantity: str
+) -> None:
+    assert sign_in(client).status_code == 302
+
+    response = submit_item(client, "/admin/items", name="Chair", quantity=quantity)
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "Stock quantity is too large." in body
+    assert 'aria-invalid="true"' in body
+    with app.app_context():
+        assert get_session().execute(select(InventoryItem)).scalars().all() == []
+
+
 def test_list_search_and_visibility_filter(client: FlaskClient) -> None:
     assert sign_in(client).status_code == 302
     assert (
