@@ -13,7 +13,13 @@ from app.images import MAX_UPLOAD_BYTES, remove_stale_uploads
 from app.logging import configure_logging
 from app.models import WebSession
 from app.rate_limit import MemoryRateLimitStore, RateLimiter, RateLimitStore
-from app.security import SESSION_COOKIE_NAME, digest_session_token, security_headers
+from app.security import (
+    ADMIN_SESSION_SECONDS,
+    CUSTOMER_SESSION_SECONDS,
+    SESSION_COOKIE_NAME,
+    digest_session_token,
+    security_headers,
+)
 from app.times import naive_utc
 
 
@@ -92,7 +98,12 @@ def create_app(
         session = getattr(g, "web_session", None)
         if session is not None:
             digest = session.session_digest
-        if not csrf_token_is_valid(config.secret_key, token, digest):
+        if not csrf_token_is_valid(
+            config.secret_key,
+            token,
+            digest,
+            max_age=_csrf_max_age(session),
+        ):
             abort(403)
 
     @app.context_processor
@@ -144,3 +155,9 @@ def create_app(
         return render_template("errors/request_too_large.html"), 413
 
     return app
+
+
+def _csrf_max_age(session: WebSession | None) -> int:
+    if session is not None and session.actor_type == "admin":
+        return ADMIN_SESSION_SECONDS
+    return CUSTOMER_SESSION_SECONDS
