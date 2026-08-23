@@ -46,11 +46,13 @@ def create_app(
     init_db(app, engine)
 
     from app.views.admin import bp as admin_bp
+    from app.views.customer import bp as customer_bp
     from app.views.health import bp as health_bp
     from app.views.pages import bp as pages_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(pages_bp)
+    app.register_blueprint(customer_bp)
     app.register_blueprint(admin_bp)
 
     @app.before_request
@@ -107,6 +109,9 @@ def create_app(
             "csrf_token": csrf_token,
             "admin_authenticated": (
                 session is not None and session.actor_type == "admin"
+            ),
+            "customer_authenticated": (
+                session is not None and session.actor_type == "booking"
             ),
         }
 

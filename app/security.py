@@ -8,6 +8,7 @@ from flask import Response
 SESSION_COOKIE_NAME = "venue_session"
 SESSION_TOKEN_BYTES = 32
 ADMIN_SESSION_SECONDS = 12 * 60 * 60
+CUSTOMER_SESSION_SECONDS = 30 * 24 * 60 * 60
 MAX_PASSWORD_LENGTH = 1024
 
 CONTENT_SECURITY_POLICY = (
@@ -31,11 +32,17 @@ def digest_session_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def set_session_cookie(response: Response, token: str, *, secure: bool) -> None:
+def set_session_cookie(
+    response: Response,
+    token: str,
+    *,
+    secure: bool,
+    max_age: int = ADMIN_SESSION_SECONDS,
+) -> None:
     response.set_cookie(
         SESSION_COOKIE_NAME,
         token,
-        max_age=ADMIN_SESSION_SECONDS,
+        max_age=max_age,
         httponly=True,
         secure=secure,
         samesite="Lax",

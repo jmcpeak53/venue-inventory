@@ -12,6 +12,7 @@ def test_prepare_runtime_refuses_missing_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("VENUE_INVENTORY_SECRET_KEY", raising=False)
+    monkeypatch.delenv("VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET", raising=False)
     monkeypatch.delenv("VENUE_INVENTORY_ADMIN_PASSWORD_HASH", raising=False)
     monkeypatch.delenv("VENUE_INVENTORY_DATA_DIR", raising=False)
     with pytest.raises(ConfigError):
@@ -26,6 +27,9 @@ def test_prepare_runtime_logs_head_revision(
     prepare_runtime(
         {
             "VENUE_INVENTORY_SECRET_KEY": "local-test-secret-key-32-bytes-min",
+            "VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET": (
+                "local-test-access-code-hmac-secret-32"
+            ),
             "VENUE_INVENTORY_ADMIN_PASSWORD_HASH": TEST_HASH,
             "VENUE_INVENTORY_DATA_DIR": str(data_dir),
             "VENUE_INVENTORY_REQUIRE_DATA_MOUNT": "false",
@@ -35,7 +39,7 @@ def test_prepare_runtime_logs_head_revision(
     )
     output = capsys.readouterr().out
     assert "migrations_applied" in output
-    assert "0002_inventory_items" in output
+    assert "0003_bookings" in output
 
 
 def test_prepare_runtime_skips_migration_when_data_dir_missing(
@@ -45,6 +49,9 @@ def test_prepare_runtime_skips_migration_when_data_dir_missing(
     prepare_runtime(
         {
             "VENUE_INVENTORY_SECRET_KEY": "local-test-secret-key-32-bytes-min",
+            "VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET": (
+                "local-test-access-code-hmac-secret-32"
+            ),
             "VENUE_INVENTORY_ADMIN_PASSWORD_HASH": TEST_HASH,
             "VENUE_INVENTORY_DATA_DIR": str(missing),
             "VENUE_INVENTORY_REQUIRE_DATA_MOUNT": "false",

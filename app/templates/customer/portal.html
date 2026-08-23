@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Your booking — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <p class="eyebrow">Booking {{ booking.public_reference }}</p>
+    <h1>Your booking</h1>
+    <p>Your customer portal is ready. Inventory selection tools will appear here in a later slice.</p>
+    <p class="muted">Event date: {{ booking.event_date }}</p>
+  </section>
+{% endblock %}

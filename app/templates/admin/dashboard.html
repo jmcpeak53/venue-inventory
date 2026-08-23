@@ -10,7 +10,9 @@
       You are signed in. Your catalog starts empty; create and manage the
       venue's catalog items here.
     </p>
-    <a class="button" href="{{ url_for('admin.item_list') }}">Manage catalog</a>
-    <p class="muted">Booking management will appear here later.</p>
+    <div class="form-actions">
+      <a class="button" href="{{ url_for('admin.item_list') }}">Manage catalog</a>
+      <a class="button secondary-button" href="{{ url_for('admin.booking_list') }}">Manage bookings</a>
+    </div>
   </section>
 {% endblock %}

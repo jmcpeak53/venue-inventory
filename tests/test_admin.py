@@ -225,6 +225,7 @@ def test_trusted_proxy_rate_limits_by_forwarded_client_ip(
 ) -> None:
     config = AppConfig(
         secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
         admin_password_hash=TEST_HASH,
         data_dir=data_dir,
         session_cookie_secure=False,
@@ -261,6 +262,7 @@ def test_secure_cookie_flag_is_emitted_when_configured(
 ) -> None:
     config = AppConfig(
         secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
         admin_password_hash=TEST_HASH,
         data_dir=data_dir,
         session_cookie_secure=True,

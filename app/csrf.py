@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from app.security import ADMIN_SESSION_SECONDS
+from app.security import CUSTOMER_SESSION_SECONDS
 
 _SALT = "venue-inventory-csrf"
 
@@ -19,7 +19,7 @@ def csrf_token_is_valid(secret_key: str, token: str, session_digest: str) -> boo
     if not token:
         return False
     try:
-        payload = _serializer(secret_key).loads(token, max_age=ADMIN_SESSION_SECONDS)
+        payload = _serializer(secret_key).loads(token, max_age=CUSTOMER_SESSION_SECONDS)
     except (BadSignature, SignatureExpired, TypeError, ValueError):
         return False
     return payload.get("sid") == session_digest

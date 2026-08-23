@@ -24,6 +24,7 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class AppConfig:
     secret_key: str
+    access_code_hmac_secret: str
     admin_password_hash: str
     data_dir: Path
     session_cookie_secure: bool
@@ -50,6 +51,17 @@ class AppConfig:
         elif len(secret_key) < REQUIRED_SECRET_LENGTH:
             problems.append(
                 "VENUE_INVENTORY_SECRET_KEY must be at least "
+                f"{REQUIRED_SECRET_LENGTH} characters."
+            )
+
+        access_code_hmac_secret = (
+            env.get("VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET") or ""
+        ).strip()
+        if not access_code_hmac_secret:
+            problems.append("VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET is required.")
+        elif len(access_code_hmac_secret) < REQUIRED_SECRET_LENGTH:
+            problems.append(
+                "VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET must be at least "
                 f"{REQUIRED_SECRET_LENGTH} characters."
             )
 
@@ -108,6 +120,7 @@ class AppConfig:
 
         return cls(
             secret_key=secret_key,
+            access_code_hmac_secret=access_code_hmac_secret,
             admin_password_hash=admin_hash,
             data_dir=data_dir,
             session_cookie_secure=session_cookie_secure,

@@ -13,6 +13,9 @@ from tests.conftest import TEST_HASH
 def _valid_env(data_dir: Path) -> dict[str, str]:
     return {
         "VENUE_INVENTORY_SECRET_KEY": "local-test-secret-key-32-bytes-min",
+        "VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET": (
+            "local-test-access-code-hmac-secret-32"
+        ),
         "VENUE_INVENTORY_ADMIN_PASSWORD_HASH": TEST_HASH,
         "VENUE_INVENTORY_DATA_DIR": str(data_dir),
         "VENUE_INVENTORY_SESSION_COOKIE_SECURE": "false",
@@ -39,6 +42,20 @@ def test_short_secret_key_is_rejected(tmp_path: Path) -> None:
     env = _valid_env(tmp_path / "data")
     env["VENUE_INVENTORY_SECRET_KEY"] = "too-short"
     with pytest.raises(ConfigError, match="at least 32"):
+        AppConfig.from_environ(env)
+
+
+def test_missing_access_code_hmac_secret_is_rejected(tmp_path: Path) -> None:
+    env = _valid_env(tmp_path / "data")
+    del env["VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET"]
+    with pytest.raises(ConfigError, match="ACCESS_CODE_HMAC_SECRET"):
+        AppConfig.from_environ(env)
+
+
+def test_short_access_code_hmac_secret_is_rejected(tmp_path: Path) -> None:
+    env = _valid_env(tmp_path / "data")
+    env["VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET"] = "too-short"
+    with pytest.raises(ConfigError, match="ACCESS_CODE_HMAC_SECRET.*at least 32"):
         AppConfig.from_environ(env)
 
 
@@ -123,6 +140,7 @@ def test_create_app_refuses_missing_environment(
 ) -> None:
     for name in (
         "VENUE_INVENTORY_SECRET_KEY",
+        "VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET",
         "VENUE_INVENTORY_ADMIN_PASSWORD_HASH",
         "VENUE_INVENTORY_DATA_DIR",
     ):

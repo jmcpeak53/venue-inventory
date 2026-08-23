@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Booking created — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel form-panel">
+    <p class="eyebrow">Administrator bookings</p>
+    <h1>Booking created</h1>
+    <p>Reference: <strong>{{ booking.public_reference }}</strong></p>
+    <p>Event date: <strong>{{ booking.event_date }}</strong></p>
+
+    <div class="access-code-panel">
+      <p class="field-label">Customer access code</p>
+      <p class="access-code" id="access-code">{{ access_code }}</p>
+      <button type="button" data-copy-target="access-code">Copy access code</button>
+    </div>
+    <p class="alert" role="alert"><strong>Save this code now.</strong> It is shown only once and cannot be recovered, reset, or regenerated later.</p>
+    <p><a class="text-action" href="{{ url_for('admin.booking_detail', booking_id=booking.id) }}">Open booking details</a></p>
+    <p><a class="text-action" href="{{ url_for('admin.booking_list') }}">Back to bookings</a></p>
+  </section>
+  <script src="{{ url_for('static', filename='js/copy.js') }}" defer></script>
+{% endblock %}
