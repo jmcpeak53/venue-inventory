@@ -259,6 +259,7 @@ def test_bootstrap_and_rollback_drill_are_idempotent_and_isolated() -> None:
     caddy = (ROOT / "scripts/ensure-caddy-inventory.sh").read_text(encoding="utf-8")
     assert "leaving them unchanged" in bootstrap
     assert "chmod 600" in bootstrap or "0o600" in bootstrap
+    assert "chown 1000:1000" in bootstrap
     assert "VENUE_INVENTORY_SKIP_INGRESS=1" in drill
     assert "VENUE_INVENTORY_DEPLOY_FAIL_AFTER=readiness" in drill
     assert "cp -a \"$caddyfile\" \"$backup\"" in caddy
