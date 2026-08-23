@@ -292,6 +292,57 @@ def test_admin_zero_removes_selection_and_invalid_value_does_not_touch_revision(
         assert get_session().get(Booking, 1).revision == 2
 
 
+@pytest.mark.parametrize("remove_via", ["hide", "delete"])
+def test_customer_save_after_item_removed_returns_not_found_without_bumping_revision(
+    app, client: FlaskClient, remove_via: str
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert submit_item(
+        client, "/admin/items", name="Chair", quantity="3"
+    ).status_code == 302
+    code = create_booking(client)
+    customer = app.test_client()
+    assert customer_sign_in(customer, code).status_code == 302
+    open_page = customer_basket_page(customer)
+    open_revision = page_revision(open_page)
+    open_csrf = csrf_token(open_page)
+    assert "Chair" in open_page.get_data(as_text=True)
+
+    if remove_via == "hide":
+        detail = client.get("/admin/items/1")
+        removed = client.post(
+            "/admin/items/1/visibility",
+            data={"csrf_token": csrf_token(detail)},
+        )
+    else:
+        confirmation = client.get("/admin/items/1/delete")
+        removed = client.post(
+            "/admin/items/1/delete",
+            data={"csrf_token": csrf_token(confirmation)},
+        )
+    assert removed.status_code == 302
+
+    response = customer.post(
+        "/customer/selections/1",
+        data={
+            "csrf_token": open_csrf,
+            "quantity": "2",
+            "revision": open_revision,
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["ok"] is False
+    assert payload["code"] == "item_not_found"
+    assert payload["message"] == "This catalog item is no longer available."
+    assert payload["revision"] == open_revision
+    assert "1" not in payload["selections"]
+    with app.app_context():
+        assert get_session().get(BookingSelection, (1, 1)) is None
+        assert get_session().get(Booking, 1).revision == open_revision
+
+
 def test_transient_customer_failure_rolls_back_and_returns_actionable_retry(
     app, client: FlaskClient
 ) -> None:

@@ -139,7 +139,14 @@
   }
 
   function handleSaved(state, payload) {
-    applySnapshot(payload, pendingIds());
+    const inputInvalidSinceSend = parsedQuantity(state.input) === null;
+    const preserve = pendingIds();
+    if (inputInvalidSinceSend) preserve.add(state.id);
+    applySnapshot(payload, preserve);
+    // Keep the in-progress invalid draft and its error; this response is stale.
+    if (inputInvalidSinceSend) {
+      return;
+    }
     const persisted = Number(payload.selections?.[state.id]?.quantity ?? 0);
     if (state.pending !== null && state.pending !== persisted) {
       showSaving(state);
