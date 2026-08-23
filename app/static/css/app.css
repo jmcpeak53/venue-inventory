@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   min-height: 100vh;
   margin: 0;
@@ -46,7 +50,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  width: min(48rem, 100%);
+  width: min(78rem, 100%);
   margin: 0 auto 1.5rem;
 }
 
@@ -167,6 +171,7 @@ input[type="password"] {
 input[type="text"],
 input[type="search"],
 input[type="date"],
+input[type="number"],
 input[type="file"],
 textarea,
 select {
@@ -475,6 +480,208 @@ h2 {
   text-align: right;
 }
 
+.basket-panel,
+.booking-detail-panel {
+  width: min(78rem, 100%);
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.basket-heading {
+  align-items: center;
+}
+
+.basket-heading .muted {
+  margin-top: 0.65rem;
+}
+
+.basket-totals {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.basket-totals div {
+  min-width: 6.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: rgb(17 26 23 / 48%);
+  text-align: center;
+}
+
+.basket-totals dt,
+.booking-summary dt,
+.basket-availability dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.basket-totals dd {
+  margin: 0.2rem 0 0;
+  color: #eef6f1;
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.basket-filters {
+  padding-bottom: 0.8rem;
+}
+
+.basket-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgb(17 26 23 / 48%);
+}
+
+.basket-toggle a {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.basket-toggle a[aria-current="page"] {
+  background: var(--accent);
+  color: #10231c;
+}
+
+.basket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.basket-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.15rem;
+  background: rgb(17 26 23 / 52%);
+}
+
+.basket-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.basket-card-body {
+  padding: 1rem;
+}
+
+.basket-card-body .item-description {
+  margin-top: 0.65rem;
+}
+
+.basket-availability {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+}
+
+.basket-availability div {
+  padding: 0.65rem;
+  border-radius: 0.75rem;
+  background: rgb(117 211 178 / 7%);
+}
+
+.basket-availability dd,
+.booking-summary dd {
+  margin: 0.25rem 0 0;
+  color: #eef6f1;
+  font-weight: 700;
+}
+
+.quantity-field {
+  margin-top: 1rem;
+}
+
+.quantity-field input {
+  max-width: 10rem;
+}
+
+.autosave-feedback {
+  display: flex;
+  min-height: 2.4rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.save-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.save-status.saving {
+  color: #d8eee5;
+}
+
+.save-status.saved {
+  color: var(--accent);
+}
+
+.save-status.save-error {
+  color: var(--danger);
+}
+
+.retry-button {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+}
+
+.basket-empty {
+  margin-top: 1.5rem;
+}
+
+.booking-summary {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  text-align: right;
+}
+
+.admin-selection-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.admin-selection-row {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) minmax(13rem, 18rem);
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgb(17 26 23 / 46%);
+  scroll-margin-top: 1rem;
+}
+
+.admin-quantity-form {
+  display: flex;
+  align-items: end;
+  gap: 0.65rem;
+}
+
+.admin-quantity-form button {
+  margin: 0;
+}
+
 .access-code-panel {
   margin-top: 1.5rem;
   padding: 1.25rem;
@@ -555,5 +762,49 @@ h2 {
 
   .booking-created {
     text-align: left;
+  }
+
+  .basket-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .basket-totals {
+    width: 100%;
+  }
+
+  .basket-totals div {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .basket-toggle {
+    display: flex;
+  }
+
+  .basket-toggle a {
+    flex: 1 1 0;
+    text-align: center;
+  }
+
+  .booking-detail-panel .page-heading {
+    flex-direction: column;
+  }
+
+  .booking-summary {
+    text-align: left;
+  }
+
+  .admin-selection-row {
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+  }
+
+  .admin-selection-row .catalog-thumbnail {
+    width: 4.25rem;
+    height: 4.25rem;
+  }
+
+  .admin-quantity-form {
+    grid-column: 1 / -1;
   }
 }

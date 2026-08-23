@@ -15,13 +15,18 @@ from flask import (
     request,
     url_for,
 )
-from sqlalchemy import String, delete, or_, select
+from sqlalchemy import String, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.access_codes import (
     access_code_digest,
     format_access_code,
     generate_access_code,
+)
+from app.baskets import (
+    parse_selected_quantity,
+    replace_selection,
+    visible_basket_items,
 )
 from app.db import get_session
 from app.images import (
@@ -220,8 +225,68 @@ def booking_create():
 @bp.get("/bookings/<int:booking_id>")
 @admin_required
 def booking_detail(booking_id: int):
-    return render_template(
-        "admin/booking_detail.html", booking=_booking_or_404(booking_id)
+    return _render_booking_detail(_booking_or_404(booking_id))
+
+
+@bp.post("/bookings/<int:booking_id>/selections/<int:item_id>")
+@admin_required
+def booking_selection_update(booking_id: int, item_id: int):
+    booking = _booking_or_404(booking_id)
+    db_session = get_session()
+    item = db_session.execute(
+        select(InventoryItem).where(
+            InventoryItem.id == item_id,
+            InventoryItem.is_visible.is_(True),
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        abort(404)
+
+    quantity_raw = request.form.get("quantity", "")
+    quantity, error = parse_selected_quantity(quantity_raw)
+    if error:
+        return _render_booking_detail(
+            booking,
+            selection_errors={item.id: error},
+            selection_values={item.id: quantity_raw},
+        )
+    assert quantity is not None
+
+    now = naive_utc(current_app.extensions["clock"].now())
+    try:
+        db_session.execute(
+            update(Booking)
+            .where(Booking.id == booking.id)
+            .values(
+                revision=Booking.revision + 1,
+                updated_at=now,
+            )
+        )
+        replace_selection(
+            db_session,
+            booking_id=booking.id,
+            inventory_item_id=item.id,
+            quantity=quantity,
+            now=now,
+        )
+        db_session.commit()
+    except SQLAlchemyError:
+        db_session.rollback()
+        logger.exception(
+            "Administrator basket change could not be committed.",
+            extra={"event": "admin_basket_save_failed"},
+        )
+        return _render_booking_detail(
+            booking,
+            selection_errors={
+                item.id: "The quantity could not be saved. Try again."
+            },
+            selection_values={item.id: quantity_raw},
+        )
+
+    return redirect(
+        url_for("admin.booking_detail", booking_id=booking.id)
+        + f"#selection-{item.id}"
     )
 
 
@@ -492,6 +557,21 @@ def _render_booking_form(
 ):
     return render_template(
         "admin/booking_form.html", values=values, errors=errors or {}
+    )
+
+
+def _render_booking_detail(
+    booking: Booking,
+    *,
+    selection_errors: dict[int, str] | None = None,
+    selection_values: dict[int, str] | None = None,
+):
+    return render_template(
+        "admin/booking_detail.html",
+        booking=booking,
+        items=visible_basket_items(get_session(), booking.id),
+        selection_errors=selection_errors or {},
+        selection_values=selection_values or {},
     )
 
 

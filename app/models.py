@@ -84,3 +84,25 @@ class InventoryItem(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class BookingSelection(Base):
+    __tablename__ = "booking_selections"
+    __table_args__ = (
+        CheckConstraint(
+            "selected_quantity > 0",
+            name="ck_booking_selections_quantity_positive",
+        ),
+    )
+
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), primary_key=True
+    )
+    inventory_item_id: Mapped[int] = mapped_column(
+        ForeignKey("inventory_items.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    selected_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -1,12 +1,101 @@
 {% extends "base.html" %}
 
-{% block title %}Your booking — Venue Inventory{% endblock %}
+{% block title %}Your basket — Venue Inventory{% endblock %}
 
 {% block content %}
-  <section class="panel">
-    <p class="eyebrow">Booking {{ booking.public_reference }}</p>
-    <h1>Your booking</h1>
-    <p>Your customer portal is ready. Inventory selection tools will appear here in a later slice.</p>
-    <p class="muted">Event date: {{ booking.event_date }}</p>
+  <section
+    class="panel basket-panel"
+    data-basket-root
+    data-revision="{{ booking.revision }}"
+    data-basket-only="{% if view_mode == 'basket' %}true{% else %}false{% endif %}"
+  >
+    <input id="basket-csrf" type="hidden" value="{{ csrf_token() }}">
+    <div class="page-heading basket-heading">
+      <div>
+        <p class="eyebrow">Booking {{ booking.public_reference }}</p>
+        <h1>Your basket</h1>
+        <p class="muted">Event date: {{ booking.event_date }}</p>
+      </div>
+      <dl class="basket-totals" aria-label="Basket totals" aria-live="polite">
+        <div>
+          <dt>Item types</dt>
+          <dd id="basket-item-types">{{ totals.item_types }}</dd>
+        </div>
+        <div>
+          <dt>Units</dt>
+          <dd id="basket-units">{{ totals.units }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <form class="catalog-filters basket-filters" method="get" action="{{ url_for('customer.portal') }}" role="search">
+      <input type="hidden" name="view" value="{{ view_mode }}">
+      <div class="field compact-field">
+        <label for="basket-search">Search items</label>
+        <input id="basket-search" name="q" type="search" value="{{ query_text }}" autocomplete="off" placeholder="Name or description">
+      </div>
+      <button class="compact-button" type="submit">Search</button>
+    </form>
+
+    <nav class="basket-toggle" aria-label="Catalog view">
+      <a href="{{ url_for('customer.portal', q=query_text, view='all') }}" {% if view_mode == 'all' %}aria-current="page"{% endif %}>All items</a>
+      <a href="{{ url_for('customer.portal', q=query_text, view='basket') }}" {% if view_mode == 'basket' %}aria-current="page"{% endif %}>My basket</a>
+    </nav>
+
+    {% if items %}
+      <div class="basket-grid">
+        {% for row in items %}
+          <article
+            class="basket-card"
+            id="selection-{{ row.item.id }}"
+            data-basket-card
+            data-item-id="{{ row.item.id }}"
+            data-stock="{{ row.item.stock_quantity }}"
+            data-selected="{{ row.selected_quantity }}"
+            data-save-url="{{ url_for('customer.selection_update', item_id=row.item.id) }}"
+          >
+            {% if row.item.image_filename %}
+              <img class="basket-image" src="{{ url_for('pages.image', filename=row.item.image_filename) }}" alt="{{ row.item.name }}">
+            {% else %}
+              <div class="image-placeholder basket-image" role="img" aria-label="No image available for {{ row.item.name }}">No image</div>
+            {% endif %}
+            <div class="basket-card-body">
+              <h2>{{ row.item.name }}</h2>
+              {% if row.item.description %}<p class="item-description">{{ row.item.description }}</p>{% endif %}
+              <dl class="basket-availability">
+                <div><dt>In stock</dt><dd data-stock-value>{{ row.item.stock_quantity }}</dd></div>
+                <div><dt>Remaining for this booking</dt><dd data-remaining>{{ row.remaining_quantity }}</dd></div>
+              </dl>
+              <div class="field quantity-field">
+                <label for="quantity-{{ row.item.id }}">Selected quantity<span class="visually-hidden"> for {{ row.item.name }}</span></label>
+                <input
+                  id="quantity-{{ row.item.id }}"
+                  data-quantity-input
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="{{ row.item.stock_quantity }}"
+                  step="1"
+                  value="{{ row.selected_quantity }}"
+                  aria-describedby="save-status-{{ row.item.id }}"
+                >
+              </div>
+              <div class="autosave-feedback">
+                <p id="save-status-{{ row.item.id }}" data-save-status class="save-status" role="status" aria-live="polite">Saved</p>
+                <button data-retry class="secondary-button retry-button" type="button" hidden>Retry<span class="visually-hidden"> {{ row.item.name }}</span></button>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state basket-empty">
+        {% if view_mode == 'basket' %}Your basket has no items matching this search.{% else %}No catalog items match this search.{% endif %}
+      </p>
+    {% endif %}
   </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/basket.js') }}" defer></script>
 {% endblock %}
