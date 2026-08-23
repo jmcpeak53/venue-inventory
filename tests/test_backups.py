@@ -4,6 +4,7 @@ import os
 import sqlite3
 import tarfile
 import threading
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -312,6 +313,86 @@ def test_prune_only_removes_recognized_old_archives(tmp_path: Path) -> None:
     assert not old.exists()
     assert recent.exists()
     assert unrelated.exists()
+
+
+def test_concurrent_same_timestamp_backups_do_not_clobber_archives(
+    app, app_config, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _seed_image_item(app, app_config.data_dir)
+    backup_root = tmp_path / "backups"
+    first_inside_lock = threading.Event()
+    second_at_lock = threading.Event()
+    first_may_finish = threading.Event()
+    errors: list[BaseException] = []
+    archives: list[Path] = []
+    import app.backups as backups
+
+    original_backup = backups._sqlite_online_backup
+    original_lock = backups.snapshot_lock
+    pause_first = threading.Lock()
+    paused = False
+    lock_entries = 0
+    lock_entries_gate = threading.Lock()
+
+    def pause_first_snapshot(source: Path, destination: Path) -> None:
+        nonlocal paused
+        should_pause = False
+        with pause_first:
+            if not paused:
+                paused = True
+                should_pause = True
+        if should_pause:
+            first_inside_lock.set()
+            first_may_finish.wait(timeout=5)
+        original_backup(source, destination)
+
+    @contextmanager
+    def observe_lock(data_dir: Path):
+        nonlocal lock_entries
+        with lock_entries_gate:
+            lock_entries += 1
+            if lock_entries == 2:
+                second_at_lock.set()
+        with original_lock(data_dir):
+            yield
+
+    monkeypatch.setattr(backups, "_sqlite_online_backup", pause_first_snapshot)
+    monkeypatch.setattr(backups, "snapshot_lock", observe_lock)
+
+    def make_backup() -> None:
+        try:
+            archives.append(
+                create_backup(
+                    data_dir=app_config.data_dir,
+                    backup_root=backup_root,
+                    git_sha=GIT_SHA,
+                    now=BACKUP_TIME,
+                )
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=make_backup)
+    second = threading.Thread(target=make_backup)
+    first.start()
+    assert first_inside_lock.wait(timeout=5)
+    second.start()
+    assert second_at_lock.wait(timeout=5)
+    first_may_finish.set()
+    first.join(timeout=10)
+    second.join(timeout=10)
+    assert errors == []
+    names = sorted(path.name for path in archives)
+    assert names == [
+        "venue-inventory-20260823T031500Z-2.tar.gz",
+        "venue-inventory-20260823T031500Z.tar.gz",
+    ]
+    assert len({path.resolve() for path in archives}) == 2
+    for path in archives:
+        assert path.is_file()
+        verify_backup(path)
+    leftovers = [path.name for path in backup_root.iterdir() if path.name.startswith(".")]
+    assert leftovers == []
 
 
 def test_backup_lock_blocks_image_reference_mutation_until_snapshot_finishes(

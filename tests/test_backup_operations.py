@@ -46,3 +46,11 @@ def test_restore_drill_migrates_isolated_data_before_readiness_smoke() -> None:
     drill = (ROOT / "scripts/restore-drill-vps.sh").read_text(encoding="utf-8")
     assert "upgrade_to_head" in drill
     assert drill.index("upgrade_to_head") < drill.index('("/readyz", 200)')
+
+
+def test_restore_drill_chowns_isolated_data_for_container_user() -> None:
+    drill = (ROOT / "scripts/restore-drill-vps.sh").read_text(encoding="utf-8")
+    assert 'chown 1000:1000 "$drill_root/data"' in drill
+    assert drill.index('chown 1000:1000 "$drill_root/data"') < drill.index(
+        "-m app.backups restore-drill"
+    )

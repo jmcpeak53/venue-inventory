@@ -93,12 +93,17 @@ def create_backup(
     if not (data_dir / "venue-inventory.sqlite3").is_file():
         raise BackupError("The application database does not exist.")
 
-    archive_name = _next_archive_name(backup_root, timestamp)
-    temporary_archive = backup_root / f".{archive_name}.tmp-{os.getpid()}"
+    temporary_archive: Path | None = None
     staging_path: Path | None = None
     published: Path | None = None
+    committed = False
     try:
         with snapshot_lock(data_dir):
+            # Claim the published name while the lock is held so a second
+            # backup that started in the same second cannot reuse it after
+            # this snapshot is released and before os.replace runs.
+            published = _reserve_next_archive(backup_root, timestamp)
+            temporary_archive = backup_root / f".{published.name}.tmp-{os.getpid()}"
             staging_path = Path(
                 tempfile.mkdtemp(prefix=".backup-stage-", dir=backup_root)
             )
@@ -125,9 +130,11 @@ def create_backup(
             _write_manifest_and_checksums(staging_path, manifest)
             _write_archive(staging_path, temporary_archive, manifest)
             os.chmod(temporary_archive, 0o600)
+        if temporary_archive is None or published is None:
+            raise BackupError("Backup could not be created safely: archive path missing.")
         verify_backup(temporary_archive)
-        published = backup_root / archive_name
         os.replace(temporary_archive, published)
+        committed = True
         _fsync_directory(backup_root)
         return published
     except BackupError:
@@ -137,7 +144,10 @@ def create_backup(
     finally:
         if staging_path is not None:
             shutil.rmtree(staging_path, ignore_errors=True)
-        Path(temporary_archive).unlink(missing_ok=True)
+        if temporary_archive is not None:
+            Path(temporary_archive).unlink(missing_ok=True)
+        if published is not None and not committed:
+            published.unlink(missing_ok=True)
 
 
 def verify_backup(archive: Path) -> BackupManifest:
@@ -755,6 +765,27 @@ def _next_archive_name(root: Path, timestamp: datetime) -> str:
         )
         number += 1
     return candidate.name
+
+
+def _reserve_next_archive(root: Path, timestamp: datetime) -> Path:
+    """Exclusively create the next timestamped archive path.
+
+    Existence checks alone are not enough: two backups can observe the same
+    unused name before either publishes. Creating the destination with
+    ``O_EXCL`` claims it so a later ``os.replace`` cannot clobber another
+    backup's just-published archive.
+    """
+
+    while True:
+        candidate = root / _next_archive_name(root, timestamp)
+        try:
+            descriptor = os.open(
+                candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+            )
+        except FileExistsError:
+            continue
+        os.close(descriptor)
+        return candidate
 
 
 def _timestamp_token(value: datetime) -> str:

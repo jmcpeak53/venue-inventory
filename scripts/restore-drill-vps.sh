@@ -26,6 +26,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$drill_root/data" "$drill_root/archive"
+# Bind mounts keep host ownership; the restore-drill container runs as uid 1000.
+chown 1000:1000 "$drill_root/data"
 cp -f "$archive_host" "$drill_root/archive/backup.tar.gz"
 
 echo "Restoring into isolated directory $drill_root/data (live /data is not written)"
