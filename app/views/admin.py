@@ -48,6 +48,7 @@ from app.security import (
     new_session_token,
     set_session_cookie,
 )
+from app.snapshot_lock import snapshot_lock
 from app.times import chicago_date, naive_utc
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -441,31 +442,33 @@ def item_create():
     if errors:
         return _render_item_form(values=values, errors=errors)
 
-    image_filename, image_error = _save_submitted_image()
-    if image_error:
-        errors["image"] = image_error
-        return _render_item_form(values=values, errors=errors)
+    data_dir = current_app.config["APP_CONFIG"].data_dir
+    with snapshot_lock(data_dir):
+        image_filename, image_error = _save_submitted_image()
+        if image_error:
+            errors["image"] = image_error
+            return _render_item_form(values=values, errors=errors)
 
-    now = naive_utc(current_app.extensions["clock"].now())
-    item = InventoryItem(
-        name=values["name"],
-        description=values["description"],
-        stock_quantity=values["stock_quantity"],
-        image_filename=image_filename,
-        is_visible=values["is_visible"],
-        created_at=now,
-        updated_at=now,
-    )
-    db_session = get_session()
-    db_session.add(item)
-    try:
-        db_session.commit()
-    except SQLAlchemyError:
-        db_session.rollback()
-        _remove_image_file(image_filename)
-        logger.exception("Creating an inventory item could not be committed.")
-        errors["form"] = "The item could not be saved. Try again."
-        return _render_item_form(values=values, errors=errors)
+        now = naive_utc(current_app.extensions["clock"].now())
+        item = InventoryItem(
+            name=values["name"],
+            description=values["description"],
+            stock_quantity=values["stock_quantity"],
+            image_filename=image_filename,
+            is_visible=values["is_visible"],
+            created_at=now,
+            updated_at=now,
+        )
+        db_session = get_session()
+        db_session.add(item)
+        try:
+            db_session.commit()
+        except SQLAlchemyError:
+            db_session.rollback()
+            _remove_image_file(image_filename)
+            logger.exception("Creating an inventory item could not be committed.")
+            errors["form"] = "The item could not be saved. Try again."
+            return _render_item_form(values=values, errors=errors)
 
     return redirect(url_for("admin.item_detail", item_id=item.id))
 
@@ -491,34 +494,38 @@ def item_update(item_id: int):
     if errors:
         return _render_item_form(item=item, values=values, errors=errors)
 
-    image_filename, image_error = _save_submitted_image()
-    if image_error:
-        errors["image"] = image_error
-        return _render_item_form(item=item, values=values, errors=errors)
+    data_dir = current_app.config["APP_CONFIG"].data_dir
+    with snapshot_lock(data_dir):
+        image_filename, image_error = _save_submitted_image()
+        if image_error:
+            errors["image"] = image_error
+            return _render_item_form(item=item, values=values, errors=errors)
 
-    prior_image_filename = item.image_filename
-    if image_filename is not None:
-        item.image_filename = image_filename
-    elif request.form.get("remove_image") == "1":
-        item.image_filename = None
-    item.name = values["name"]
-    item.description = values["description"]
-    item.stock_quantity = values["stock_quantity"]
-    item.is_visible = values["is_visible"]
-    item.updated_at = naive_utc(current_app.extensions["clock"].now())
+        prior_image_filename = item.image_filename
+        if image_filename is not None:
+            item.image_filename = image_filename
+        elif request.form.get("remove_image") == "1":
+            item.image_filename = None
+        item.name = values["name"]
+        item.description = values["description"]
+        item.stock_quantity = values["stock_quantity"]
+        item.is_visible = values["is_visible"]
+        item.updated_at = naive_utc(current_app.extensions["clock"].now())
 
-    db_session = get_session()
-    try:
-        db_session.commit()
-    except SQLAlchemyError:
-        db_session.rollback()
-        _remove_image_file(image_filename)
-        logger.exception("Updating inventory item %s could not be committed.", item_id)
-        errors["form"] = "The item could not be saved. Try again."
-        return _render_item_form(item=item, values=values, errors=errors)
+        db_session = get_session()
+        try:
+            db_session.commit()
+        except SQLAlchemyError:
+            db_session.rollback()
+            _remove_image_file(image_filename)
+            logger.exception(
+                "Updating inventory item %s could not be committed.", item_id
+            )
+            errors["form"] = "The item could not be saved. Try again."
+            return _render_item_form(item=item, values=values, errors=errors)
 
-    if prior_image_filename and prior_image_filename != item.image_filename:
-        _remove_image_file(prior_image_filename)
+        if prior_image_filename and prior_image_filename != item.image_filename:
+            _remove_image_file(prior_image_filename)
     return redirect(url_for("admin.item_detail", item_id=item.id))
 
 
@@ -564,59 +571,62 @@ def item_delete(item_id: int):
     if blocking_bookings:
         return _item_delete_blocked_response(item, blocking_bookings)
 
-    image_filename = item.image_filename
     # End the read snapshot so the write transaction can see a selection
     # committed after that first guard read.
     db_session.rollback()
-    item = db_session.get(InventoryItem, item.id)
-    if item is None:
-        abort(404)
-    try:
-        # Past-only rows are removed under this write transaction. The item
-        # is deleted only if no current/future selection exists at statement
-        # time, so a later selection cannot be dropped with the item.
-        db_session.execute(
-            delete(BookingSelection).where(
-                BookingSelection.inventory_item_id == item.id,
-                BookingSelection.booking_id.in_(
-                    select(Booking.id).where(Booking.event_date < today)
-                ),
+    with snapshot_lock(current_app.config["APP_CONFIG"].data_dir):
+        item = db_session.get(InventoryItem, item.id)
+        if item is None:
+            abort(404)
+        image_filename = item.image_filename
+        try:
+            # Past-only rows are removed under this write transaction. The item
+            # is deleted only if no current/future selection exists at statement
+            # time, so a later selection cannot be dropped with the item.
+            db_session.execute(
+                delete(BookingSelection).where(
+                    BookingSelection.inventory_item_id == item.id,
+                    BookingSelection.booking_id.in_(
+                        select(Booking.id).where(Booking.event_date < today)
+                    ),
+                )
             )
-        )
-        blocking_bookings = _item_deletion_blockers(item.id, today)
-        if blocking_bookings:
-            return _item_delete_blocked_response(item, blocking_bookings)
-        deleted = db_session.execute(
-            delete(InventoryItem).where(
-                InventoryItem.id == item.id,
-                ~_blocking_selection_exists(item.id, today),
-            )
-        )
-        if deleted.rowcount != 1:
             blocking_bookings = _item_deletion_blockers(item.id, today)
             if blocking_bookings:
                 return _item_delete_blocked_response(item, blocking_bookings)
-            if db_session.get(InventoryItem, item.id) is None:
+            deleted = db_session.execute(
+                delete(InventoryItem).where(
+                    InventoryItem.id == item.id,
+                    ~_blocking_selection_exists(item.id, today),
+                )
+            )
+            if deleted.rowcount != 1:
+                blocking_bookings = _item_deletion_blockers(item.id, today)
+                if blocking_bookings:
+                    return _item_delete_blocked_response(item, blocking_bookings)
+                if db_session.get(InventoryItem, item.id) is None:
+                    db_session.rollback()
+                    abort(404)
                 db_session.rollback()
-                abort(404)
+                return _render_item_delete(
+                    item=item,
+                    blocking_bookings=[],
+                    error="The item could not be deleted. Try again.",
+                )
+            db_session.commit()
+        except SQLAlchemyError:
             db_session.rollback()
+            logger.exception(
+                "Deleting inventory item %s could not be committed.", item_id
+            )
             return _render_item_delete(
                 item=item,
                 blocking_bookings=[],
                 error="The item could not be deleted. Try again.",
             )
-        db_session.commit()
-    except SQLAlchemyError:
-        db_session.rollback()
-        logger.exception("Deleting inventory item %s could not be committed.", item_id)
-        return _render_item_delete(
-            item=item,
-            blocking_bookings=[],
-            error="The item could not be deleted. Try again.",
-        )
 
-    if image_filename:
-        _remove_image_file(image_filename)
+        if image_filename:
+            _remove_image_file(image_filename)
     return redirect(url_for("admin.item_list"))
 
 

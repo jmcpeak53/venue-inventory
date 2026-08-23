@@ -14,8 +14,8 @@ RUN pip install -r /app/requirements.lock
 
 RUN groupadd --gid 1000 app \
     && useradd --uid 1000 --gid 1000 --create-home --home-dir /home/app --shell /usr/sbin/nologin app \
-    && mkdir -p /data \
-    && chown app:app /data
+    && mkdir -p /data /backups \
+    && chown app:app /data /backups
 
 COPY app /app/app
 COPY migrations /app/migrations
@@ -27,7 +27,7 @@ RUN chmod 755 /app/entrypoint.sh \
 
 USER app
 EXPOSE 8080
-VOLUME ["/data"]
+VOLUME ["/data", "/backups"]
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "4", "--timeout", "30", "--graceful-timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "--capture-output", "wsgi:app"]
 
@@ -38,6 +38,10 @@ COPY requirements-dev.lock pyproject.toml /app/
 RUN pip install -r /app/requirements-dev.lock
 COPY tests /app/tests
 COPY scripts /app/scripts
+COPY systemd /app/systemd
+COPY compose.yaml /app/compose.yaml
 RUN chmod 755 /app/scripts/verify.sh /app/scripts/entrypoint.sh \
-    && chmod -R a+rX /app/tests /app/scripts /app/pyproject.toml
+    && chmod 755 /app/scripts/run-backup-vps.sh /app/scripts/restore-vps.sh \
+        /app/scripts/restore-drill-vps.sh /app/scripts/install-backup-timer-vps.sh \
+    && chmod -R a+rX /app/tests /app/scripts /app/pyproject.toml /app/systemd /app/compose.yaml
 USER app

@@ -48,6 +48,35 @@ else
   cd "$deploy_directory"
 fi
 
+backup_dir="${VENUE_INVENTORY_BACKUP_DIR:-$deploy_directory/backups}"
+mkdir -p "$backup_dir"
+# Bind mounts keep host ownership; the backup container runs as uid 1000.
+chown 1000:1000 "$backup_dir"
+
+echo "Building the replacement image before backup and migration"
+if ! docker compose build web; then
+  echo "Deployment stopped: the replacement image could not be built." >&2
+  exit 1
+fi
+
+set +e
+docker compose run --rm --no-deps --entrypoint python web -c \
+  'from pathlib import Path; raise SystemExit(0 if Path("/data/venue-inventory.sqlite3").is_file() else 3)'
+inspect_status=$?
+set -e
+if [[ "$inspect_status" -eq 0 ]]; then
+  echo "Creating a verified pre-deployment backup before migrations"
+  if ! VENUE_INVENTORY_BACKUP_USE_RUN=1 ./scripts/run-backup-vps.sh; then
+    echo "Deployment stopped: pre-deployment backup failed; refusing to migrate." >&2
+    exit 1
+  fi
+elif [[ "$inspect_status" -eq 3 ]]; then
+  echo "No application database yet; skipping pre-deployment backup."
+else
+  echo "Deployment stopped: could not inspect the data volume before backup." >&2
+  exit 1
+fi
+
 if ! VENUE_INVENTORY_PORT="$public_port" docker compose up -d --build --remove-orphans --wait --wait-timeout 60; then
   echo "Deployment did not become healthy within 60 seconds." >&2
   docker compose ps >&2

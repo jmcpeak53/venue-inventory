@@ -5,6 +5,8 @@ from pathlib import Path
 
 from app.config import AppConfig
 
+IMAGES_DIRECTORY_NAME = "images"
+
 
 def data_dir_is_ready(config: AppConfig) -> tuple[bool, str]:
     path = config.data_dir
@@ -28,3 +30,16 @@ def data_dir_is_ready(config: AppConfig) -> tuple[bool, str]:
 def database_file_exists(config: AppConfig) -> bool:
     path: Path = config.database_path
     return path.is_file()
+
+
+def ensure_data_layout(config: AppConfig) -> None:
+    """Create the durable subdirectories after the data root is validated.
+
+    The deployed state layout is intentionally small and stable:
+    ``/data/venue-inventory.sqlite3`` plus ``/data/images``.  Backup lock and
+    restore staging files are dot-prefixed operational metadata, never state
+    included in an archive.
+    """
+
+    if config.data_dir.is_dir():
+        (config.data_dir / IMAGES_DIRECTORY_NAME).mkdir(exist_ok=True)

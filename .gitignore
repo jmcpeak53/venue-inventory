@@ -1,5 +1,6 @@
 .env
 .venv/
+/backups/
 .orchestration-bodies/
 factory.yaml
 __pycache__/
