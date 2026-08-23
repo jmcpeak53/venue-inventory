@@ -546,7 +546,9 @@ def item_delete(item_id: int):
             if blocking_bookings:
                 return _item_delete_blocked_response(item, blocking_bookings)
             if db_session.get(InventoryItem, item.id) is None:
+                db_session.rollback()
                 abort(404)
+            db_session.rollback()
             return _render_item_delete(
                 item=item,
                 blocking_bookings=[],
@@ -671,6 +673,9 @@ def _item_deletion_blockers(item_id: int, today: date | None = None) -> list[Boo
 
 
 def _item_delete_blocked_response(item: InventoryItem, blocking_bookings: list[Booking]):
+    # Drop any uncommitted past-selection DELETE before rendering so a later
+    # commit or lazy-load cannot persist a partial write.
+    get_session().rollback()
     return (
         _render_item_delete(
             item,

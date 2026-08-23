@@ -450,6 +450,67 @@ def test_item_delete_does_not_drop_a_current_selection_committed_after_the_guard
         assert get_session().get(Booking, 2) is not None
 
 
+def test_item_delete_blocked_path_rolls_back_before_render(
+    app, client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert (
+        submit_item(client, "/admin/items", name="Chair", quantity="1").status_code
+        == 302
+    )
+    create_booking(client, "2026-08-21")
+    create_booking(client, "2026-08-23")
+    assert admin_save(client, 1, 1, "1").status_code == 302
+
+    original_blockers = admin_views._item_deletion_blockers
+    original_render = admin_views._render_item_delete
+    injected = {"done": False}
+
+    def blockers_then_commit_current_selection(
+        item_id: int, today=None
+    ) -> list[Booking]:
+        found = original_blockers(item_id, today)
+        if injected["done"] or found:
+            return found
+        injected["done"] = True
+        other = app.extensions["session_factory"]()
+        try:
+            now = naive_utc(app.extensions["clock"].now())
+            other.add(
+                BookingSelection(
+                    booking_id=2,
+                    inventory_item_id=item_id,
+                    selected_quantity=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            other.commit()
+        finally:
+            other.close()
+        return found
+
+    def commit_then_render(*args, **kwargs):
+        get_session().commit()
+        return original_render(*args, **kwargs)
+
+    confirmation = client.get("/admin/items/1/delete")
+    monkeypatch.setattr(
+        admin_views, "_item_deletion_blockers", blockers_then_commit_current_selection
+    )
+    monkeypatch.setattr(admin_views, "_render_item_delete", commit_then_render)
+    response = client.post(
+        "/admin/items/1/delete",
+        data={"csrf_token": csrf_token(confirmation)},
+    )
+
+    assert response.status_code == 409
+    with app.app_context():
+        assert get_session().get(InventoryItem, 1) is not None
+        assert get_session().get(BookingSelection, (1, 1)) is not None
+        assert get_session().get(BookingSelection, (2, 1)) is not None
+
+
 def test_item_delete_does_not_drop_a_current_selection_added_during_the_transaction(
     app, client: FlaskClient
 ) -> None:
