@@ -28,7 +28,7 @@ chmod 600 "$tmp"
 cleanup() { rm -f "$tmp"; }
 trap cleanup EXIT
 
-COMPOSE_PROGRESS=quiet docker compose -f compose.yaml run --rm --no-deps --no-log-prefix \
+COMPOSE_PROGRESS=quiet docker compose -f compose.yaml run --rm --no-deps \
   --entrypoint python web -m app.hash_password --bootstrap-json >"$tmp"
 
 python3 - "$tmp" "$secrets_file" "$hash_file" "$once_file" <<'PY'
