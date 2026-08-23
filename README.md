@@ -23,7 +23,8 @@ customer browsing, while a hidden item already selected by a booking stays
 locked and labeled unavailable in that booking's basket. Item deletion is
 blocked by current or future selecting bookings using the Chicago calendar;
 past-only selection rows are removed with the item while their bookings remain.
-HTTPS comes in a later slice.
+The live prototype is served at `https://inventory.needleminder.app/` through
+the existing Caddy ingress. Raw public port 8080 is closed.
 
 ## Setup
 
@@ -209,13 +210,19 @@ after container replacement:
 | `tests/` | HTTP integration and optional real-browser tests for auth, bookings, baskets, catalog, health, migrations, and backup/restore. |
 | `scripts/verify.sh` | Tests and (on the host) container health probes. |
 | `scripts/entrypoint.sh` | Validates configuration and applies migrations before Gunicorn. |
-| `scripts/deploy-vps.sh` | Pull, verified pre-deployment backup, rebuild, restart, and verify the VPS service. |
+| `scripts/deploy-vps.sh` | CI-gated pull, DNS, backup, rebuild, HTTPS smoke, firewall close, and rollback. |
+| `scripts/deploy-remote.sh` | VPS-side deploy, Caddy join, paired backup/SHA rollback, and port close. |
+| `scripts/deploy_lib.py` | Testable CI, DNS, Caddy, and rollback decisions used by the deploy scripts. |
+| `scripts/bootstrap-prod-secrets.sh` | Idempotent production secret file creation outside Git. |
+| `scripts/ensure-caddy-inventory.sh` | Backup, validate, and reload only the inventory Caddy site. |
+| `scripts/rollback-drill-vps.sh` | Isolated induced-failure rollback that cannot touch live ingress. |
 | `scripts/run-backup-vps.sh` | Create and prune verified backups (nightly timer and coding-agent use). |
 | `scripts/restore-vps.sh` | Stop writes, restore a verified archive, and confirm readiness. |
 | `scripts/restore-drill-vps.sh` | Isolated restore that cannot overwrite live data. |
 | `scripts/install-backup-timer-vps.sh` | Idempotent nightly systemd timer installation. |
 | `systemd/` | Nightly backup service and timer unit templates. |
-| `compose.yaml` | Local and VPS `web` runtime service, plus a `verify` profile for checks. |
+| `compose.yaml` | Local `web` runtime service, plus a `verify` profile for checks. |
+| `compose.prod.yaml` | VPS overlay: Caddy network, secure cookies, and production secrets. |
 | `Dockerfile` | Non-root Flask/Gunicorn runtime image plus a verification stage. |
 | `requirements.lock` | Locked runtime dependencies. |
 | `requirements-dev.lock` | Locked runtime plus pytest. |
@@ -227,10 +234,16 @@ after container replacement:
 
 ## Deployment
 
-A coding agent owns deployment, backup, restore, and the nightly timer. After
-pushing a commit, the agent deploys with `./scripts/deploy-vps.sh`, which
-creates a verified backup before migrations run. See
-[docs/deployment.md](docs/deployment.md) for restore, the isolated restore
-drill, and the same-VPS backup limit. HTTPS, Caddy, offsite copies, and
-production secret management remain later slices. Do not use the local
-default password on a public server.
+A coding agent owns deployment, DNS, Caddy, backup, restore, rollback, and
+the nightly timer. After a commit's required GitHub `verify` check passes,
+the agent deploys with `./scripts/deploy-vps.sh`. That command refuses a
+missing or failed CI check, creates a verified backup before migrations,
+joins Caddy without changing Needleminder, smokes `https://inventory.needleminder.app/`,
+and rolls back the prior SHA plus paired backup if startup or smoke fails.
+See [docs/deployment.md](docs/deployment.md) for restore, the isolated
+rollback drill, and the same-VPS backup limit. Offsite copies remain a later
+slice. Do not use the local default password on the public server.
+
+The operator handoff is only the public URL and the one-time administrator
+password printed at first launch. No terminal, DNS, GitHub, Docker, or VPS
+step is required of the operator.
