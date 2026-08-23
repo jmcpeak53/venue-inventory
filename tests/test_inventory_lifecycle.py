@@ -6,13 +6,15 @@ from datetime import UTC, datetime
 
 import pytest
 from flask.testing import FlaskClient
-from sqlalchemy import event, select
+from sqlalchemy import event, insert, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.images import image_directory
 from app.models import Booking, BookingSelection, InventoryItem
+from app.times import naive_utc
+from app.views import admin as admin_views
 from tests.conftest import csrf_token, sign_in
 from tests.test_admin_catalog import image_bytes, submit_item
 from tests.test_baskets import (
@@ -309,6 +311,13 @@ def test_item_delete_uses_chicago_date_at_midnight_and_dst_transitions(
         assert response.status_code == 302
 
 
+def _statement_targets_inventory_items(execute_state) -> bool:
+    if not execute_state.is_delete:
+        return False
+    table = getattr(execute_state.statement, "table", None)
+    return getattr(table, "name", None) == InventoryItem.__tablename__
+
+
 def test_past_selection_delete_rolls_back_rows_when_item_commit_fails(
     app, client: FlaskClient
 ) -> None:
@@ -320,11 +329,11 @@ def test_past_selection_delete_rolls_back_rows_when_item_commit_fails(
     create_booking(client, "2026-08-21")
     assert admin_save(client, 1, 1, "1").status_code == 302
 
-    def fail_item_delete(session: Session) -> None:
-        if any(isinstance(row, InventoryItem) for row in session.deleted):
+    def fail_item_delete(execute_state) -> None:
+        if _statement_targets_inventory_items(execute_state):
             raise SQLAlchemyError("injected item deletion failure")
 
-    event.listen(Session, "before_commit", fail_item_delete)
+    event.listen(Session, "do_orm_execute", fail_item_delete)
     try:
         confirmation = client.get("/admin/items/1/delete")
         response = client.post(
@@ -332,7 +341,7 @@ def test_past_selection_delete_rolls_back_rows_when_item_commit_fails(
             data={"csrf_token": csrf_token(confirmation)},
         )
     finally:
-        event.remove(Session, "before_commit", fail_item_delete)
+        event.remove(Session, "do_orm_execute", fail_item_delete)
 
     assert response.status_code == 200
     assert "could not be deleted" in response.get_data(as_text=True)
@@ -340,6 +349,117 @@ def test_past_selection_delete_rolls_back_rows_when_item_commit_fails(
         assert get_session().get(InventoryItem, 1) is not None
         assert get_session().get(BookingSelection, (1, 1)) is not None
         assert get_session().get(Booking, 1) is not None
+
+
+def test_item_delete_does_not_drop_a_current_selection_committed_after_the_guard_read(
+    app, client: FlaskClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert (
+        submit_item(client, "/admin/items", name="Chair", quantity="1").status_code
+        == 302
+    )
+    create_booking(client, "2026-08-21")
+    create_booking(client, "2026-08-23")
+    assert admin_save(client, 1, 1, "1").status_code == 302
+
+    original_blockers = admin_views._item_deletion_blockers
+    injected = {"done": False}
+
+    def blockers_then_commit_current_selection(
+        item_id: int, today=None
+    ) -> list[Booking]:
+        found = original_blockers(item_id, today)
+        if injected["done"] or found:
+            return found
+        injected["done"] = True
+        other = app.extensions["session_factory"]()
+        try:
+            now = naive_utc(app.extensions["clock"].now())
+            other.add(
+                BookingSelection(
+                    booking_id=2,
+                    inventory_item_id=item_id,
+                    selected_quantity=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            other.commit()
+        finally:
+            other.close()
+        return found
+
+    confirmation = client.get("/admin/items/1/delete")
+    monkeypatch.setattr(
+        admin_views, "_item_deletion_blockers", blockers_then_commit_current_selection
+    )
+    response = client.post(
+        "/admin/items/1/delete",
+        data={"csrf_token": csrf_token(confirmation)},
+    )
+
+    assert response.status_code == 409
+    body = response.get_data(as_text=True)
+    assert "B-0002" in body
+    assert "2026-08-23" in body
+    with app.app_context():
+        assert get_session().get(InventoryItem, 1) is not None
+        assert get_session().get(BookingSelection, (1, 1)) is not None
+        committed = get_session().get(BookingSelection, (2, 1))
+        assert committed is not None
+        assert committed.selected_quantity == 1
+        assert get_session().get(Booking, 1) is not None
+        assert get_session().get(Booking, 2) is not None
+
+
+def test_item_delete_does_not_drop_a_current_selection_added_during_the_transaction(
+    app, client: FlaskClient
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert (
+        submit_item(client, "/admin/items", name="Chair", quantity="1").status_code
+        == 302
+    )
+    create_booking(client, "2026-08-21")
+    create_booking(client, "2026-08-23")
+    assert admin_save(client, 1, 1, "1").status_code == 302
+
+    def inject_current_selection(execute_state) -> None:
+        if not _statement_targets_inventory_items(execute_state):
+            return
+        now = naive_utc(app.extensions["clock"].now())
+        execute_state.session.connection().execute(
+            insert(BookingSelection.__table__),
+            {
+                "booking_id": 2,
+                "inventory_item_id": 1,
+                "selected_quantity": 1,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+
+    event.listen(Session, "do_orm_execute", inject_current_selection)
+    try:
+        confirmation = client.get("/admin/items/1/delete")
+        response = client.post(
+            "/admin/items/1/delete",
+            data={"csrf_token": csrf_token(confirmation)},
+        )
+    finally:
+        event.remove(Session, "do_orm_execute", inject_current_selection)
+
+    assert response.status_code == 409
+    body = response.get_data(as_text=True)
+    assert "B-0002" in body
+    assert "2026-08-23" in body
+    assert "Hide the item instead" in body
+    with app.app_context():
+        assert get_session().get(InventoryItem, 1) is not None
+        assert get_session().get(BookingSelection, (1, 1)) is not None
+        assert get_session().get(Booking, 1) is not None
+        assert get_session().get(Booking, 2) is not None
 
 
 def test_image_cleanup_exception_after_delete_logs_recoverable_orphan(

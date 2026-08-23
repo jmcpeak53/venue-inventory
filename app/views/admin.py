@@ -15,7 +15,7 @@ from flask import (
     request,
     url_for,
 )
-from sqlalchemy import String, delete, or_, select, update
+from sqlalchemy import String, delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.access_codes import (
@@ -508,28 +508,50 @@ def item_delete_confirm(item_id: int):
 def item_delete(item_id: int):
     item = _item_or_404(item_id)
     db_session = get_session()
-    blocking_bookings = _item_deletion_blockers(item.id)
+    today = chicago_date(current_app.extensions["clock"].now())
+    blocking_bookings = _item_deletion_blockers(item.id, today)
     if blocking_bookings:
-        return (
-            _render_item_delete(
-                item,
-                blocking_bookings=blocking_bookings,
-                error=(
-                    "This item cannot be deleted because it is selected by a "
-                    "current or future booking. Hide it instead."
-                ),
-            ),
-            409,
-        )
+        return _item_delete_blocked_response(item, blocking_bookings)
 
     image_filename = item.image_filename
+    # End the read snapshot so the write transaction can see a selection
+    # committed after that first guard read.
+    db_session.rollback()
+    item = db_session.get(InventoryItem, item.id)
+    if item is None:
+        abort(404)
     try:
+        # Past-only rows are removed under this write transaction. The item
+        # is deleted only if no current/future selection exists at statement
+        # time, so a later selection cannot be dropped with the item.
         db_session.execute(
             delete(BookingSelection).where(
-                BookingSelection.inventory_item_id == item.id
+                BookingSelection.inventory_item_id == item.id,
+                BookingSelection.booking_id.in_(
+                    select(Booking.id).where(Booking.event_date < today)
+                ),
             )
         )
-        db_session.delete(item)
+        blocking_bookings = _item_deletion_blockers(item.id, today)
+        if blocking_bookings:
+            return _item_delete_blocked_response(item, blocking_bookings)
+        deleted = db_session.execute(
+            delete(InventoryItem).where(
+                InventoryItem.id == item.id,
+                ~_blocking_selection_exists(item.id, today),
+            )
+        )
+        if deleted.rowcount != 1:
+            blocking_bookings = _item_deletion_blockers(item.id, today)
+            if blocking_bookings:
+                return _item_delete_blocked_response(item, blocking_bookings)
+            if db_session.get(InventoryItem, item.id) is None:
+                abort(404)
+            return _render_item_delete(
+                item=item,
+                blocking_bookings=[],
+                error="The item could not be deleted. Try again.",
+            )
         db_session.commit()
     except SQLAlchemyError:
         db_session.rollback()
@@ -612,8 +634,23 @@ def _render_booking_detail(
     )
 
 
-def _item_deletion_blockers(item_id: int) -> list[Booking]:
-    today = chicago_date(current_app.extensions["clock"].now())
+def _blocking_selection_exists(item_id: int, today: date):
+    return exists(
+        select(Booking.id)
+        .join(
+            BookingSelection,
+            BookingSelection.booking_id == Booking.id,
+        )
+        .where(
+            BookingSelection.inventory_item_id == item_id,
+            Booking.event_date >= today,
+        )
+    )
+
+
+def _item_deletion_blockers(item_id: int, today: date | None = None) -> list[Booking]:
+    if today is None:
+        today = chicago_date(current_app.extensions["clock"].now())
     return (
         get_session()
         .execute(
@@ -630,6 +667,20 @@ def _item_deletion_blockers(item_id: int) -> list[Booking]:
         )
         .scalars()
         .all()
+    )
+
+
+def _item_delete_blocked_response(item: InventoryItem, blocking_bookings: list[Booking]):
+    return (
+        _render_item_delete(
+            item,
+            blocking_bookings=blocking_bookings,
+            error=(
+                "This item cannot be deleted because it is selected by a "
+                "current or future booking. Hide it instead."
+            ),
+        ),
+        409,
     )
 
 
