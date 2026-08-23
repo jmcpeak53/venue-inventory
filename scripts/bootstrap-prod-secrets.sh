@@ -12,7 +12,16 @@ once_file="${VENUE_INVENTORY_ADMIN_PASSWORD_ONCE_FILE:-$secrets_dir/admin-passwo
 mkdir -p "$secrets_dir"
 chmod 700 "$secrets_dir"
 
+fix_hash_file_permissions() {
+  # The container runs as uid 1000 and must be able to read the mounted hash.
+  if [[ -f "$hash_file" ]]; then
+    chown 1000:1000 "$hash_file"
+    chmod 600 "$hash_file"
+  fi
+}
+
 if [[ -f "$secrets_file" && -f "$hash_file" ]]; then
+  fix_hash_file_permissions
   echo "Production secrets already exist at $secrets_dir; leaving them unchanged."
   exit 0
 fi
@@ -48,8 +57,13 @@ Path(secrets_file).write_text(payload["env"], encoding="utf-8")
 os.chmod(secrets_file, 0o600)
 Path(hash_file).write_text(payload["hash"] + "\n", encoding="utf-8")
 os.chmod(hash_file, 0o600)
+try:
+    os.chown(hash_file, 1000, 1000)
+except PermissionError:
+    pass
 Path(once_file).write_text(payload["password"] + "\n", encoding="utf-8")
 os.chmod(once_file, 0o600)
 PY
 
+fix_hash_file_permissions
 echo "Wrote $secrets_file and $hash_file."
