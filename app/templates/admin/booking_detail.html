@@ -3,22 +3,66 @@
 {% block title %}{{ booking.public_reference }} — Venue Inventory{% endblock %}
 
 {% block content %}
-  <section class="panel booking-detail-panel">
-    <p class="eyebrow">Administrator booking</p>
+  <section class="panel booking-detail-panel" data-booking-detail>
+    <p class="eyebrow no-print">Administrator booking</p>
     <div class="page-heading">
       <div>
-        <h1>{{ booking.public_reference }}</h1>
-        <p class="muted">Edit visible catalog items and any hidden item already selected by this booking. Administrator quantities may exceed stock.</p>
+        <h1 data-preparation-reference>{{ booking.public_reference }}</h1>
+        <p class="muted no-print">Edit the event date freely. Edit visible catalog items and any hidden item already selected by this booking. Administrator quantities may exceed stock.</p>
       </div>
-      <dl class="booking-summary">
-        <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
-        <div><dt>Created</dt><dd>{{ booking.created_at }} UTC</dd></div>
-        <div><dt>Last updated</dt><dd>{{ booking.updated_at }} UTC</dd></div>
+      <dl class="booking-summary" data-preparation-summary>
+        <div><dt>Event date</dt><dd data-preparation-event-date>{{ booking.event_date }}</dd></div>
+        <div class="no-print"><dt>Created</dt><dd>{{ booking.created_at }} UTC</dd></div>
+        <div class="no-print"><dt>Last updated</dt><dd>{{ booking.updated_at }} UTC</dd></div>
       </dl>
     </div>
 
+    <form class="event-date-form no-print" method="post" action="{{ url_for('admin.booking_update', booking_id=booking.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if event_date_errors.get('form') %}<div class="alert" role="alert">{{ event_date_errors['form'] }}</div>{% endif %}
+      <div class="field compact-field">
+        <label for="event_date">Event date</label>
+        <input id="event_date" name="event_date" type="date" required value="{{ event_date_value }}" {% if event_date_errors.get('event_date') %}aria-invalid="true" aria-describedby="event-date-error"{% endif %}>
+        {% if event_date_errors.get('event_date') %}<p class="field-error" id="event-date-error">{{ event_date_errors['event_date'] }}</p>{% endif %}
+      </div>
+      <button class="compact-button" type="submit">Update event date</button>
+    </form>
+
+    <div class="preparation-toolbar no-print">
+      <button class="compact-button" type="button" data-print-list>Print list</button>
+    </div>
+
+    <section class="preparation-list" data-preparation-list aria-label="Preparation list">
+      <h2 class="preparation-heading">Preparation list</h2>
+      {% if preparation_items %}
+        <div class="preparation-items">
+          {% for row in preparation_items %}
+            <article class="preparation-item" data-preparation-item id="preparation-{{ row.item.id }}">
+              <div>
+                <div class="catalog-title-row">
+                  <h3>{{ row.item.name }}</h3>
+                  {% if not row.item.is_visible %}<span class="badge hidden">Hidden</span>{% endif %}
+                </div>
+                <p class="item-quantity">Selected quantity: <strong data-preparation-quantity>{{ row.selected_quantity }}</strong></p>
+                <p class="item-quantity">Remaining for this booking: <strong class="{% if row.has_negative_remaining %}negative-remaining-value{% endif %}" data-preparation-remaining>{{ row.remaining_quantity }}</strong></p>
+                {% if row.has_negative_remaining %}
+                  <p class="inline-warning" role="alert" data-preparation-warning="negative">Negative remaining: this booking selects more than the current stock.</p>
+                {% endif %}
+                {% if not row.item.is_visible %}
+                  <p class="inline-warning" data-preparation-warning="hidden">Hidden from customers; administrator quantity controls remain available.</p>
+                {% endif %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-state" data-preparation-empty>No items are selected for this booking.</p>
+      {% endif %}
+    </section>
+
+    <h2 class="no-print">Basket controls</h2>
     {% if items %}
-      <div class="admin-selection-list">
+      <div class="admin-selection-list no-print">
         {% for row in items %}
           {% set selection_error = selection_errors.get(row.item.id) %}
           <article class="admin-selection-row" id="selection-{{ row.item.id }}">
@@ -63,12 +107,22 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="empty-state">There are no visible catalog items or hidden selections.</p>
+      <p class="empty-state no-print">There are no visible catalog items or hidden selections.</p>
     {% endif %}
 
-    <div class="form-actions">
+    <div class="form-actions no-print">
       <a class="text-action danger-text" href="{{ url_for('admin.booking_delete_confirm', booking_id=booking.id) }}">Delete booking</a>
       <a class="text-action" href="{{ url_for('admin.booking_list') }}">Back to bookings</a>
     </div>
   </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    (() => {
+      const button = document.querySelector("[data-print-list]");
+      if (!button) return;
+      button.addEventListener("click", () => window.print());
+    })();
+  </script>
 {% endblock %}

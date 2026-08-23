@@ -22,11 +22,15 @@ from app.access_codes import (
     access_code_digest,
     format_access_code,
     generate_access_code,
+    is_valid_access_code,
 )
 from app.baskets import (
+    BookingListTotals,
     admin_basket_items,
+    booking_list_totals,
     parse_selected_quantity,
     replace_selection,
+    selection_count,
 )
 from app.db import get_session
 from app.images import (
@@ -50,6 +54,9 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger("venue_inventory.admin")
 
 SIGN_IN_FAILED = "Sign-in failed."
+ACCESS_CODE_LOOKUP_FAILED = "No booking matches that access code."
+INVALID_LOOKUP_VALUE = "!" * 12
+BOOKING_WHEN_VALUES = frozenset({"upcoming", "past", "all"})
 MAX_ITEM_NAME_LENGTH = 200
 MAX_ITEM_DESCRIPTION_LENGTH = 2_000
 MAX_STOCK_QUANTITY = 2_147_483_647
@@ -134,32 +141,43 @@ def dashboard():
 @bp.get("/bookings")
 @admin_required
 def booking_list():
-    db_session = get_session()
-    bookings = (
-        db_session
-        .execute(
-            select(Booking).order_by(Booking.created_at.desc(), Booking.id.desc())
+    return _render_booking_list()
+
+
+@bp.post("/bookings/lookup")
+@admin_required
+def booking_lookup():
+    # Exact-code lookup stays on POST so the secret never enters a query string,
+    # browser history, or proxy access log. Application logs never record it.
+    entered_code = request.form.get("access_code", "")
+    lookup_value = (
+        entered_code if is_valid_access_code(entered_code) else INVALID_LOOKUP_VALUE
+    )
+    config = current_app.config["APP_CONFIG"]
+    digest = access_code_digest(lookup_value, config.access_code_hmac_secret)
+    booking = (
+        get_session()
+        .execute(select(Booking).where(Booking.access_code_digest == digest))
+        .scalar_one_or_none()
+    )
+    if booking is None:
+        logger.info(
+            "Administrator access-code lookup failed.",
+            extra={"event": "admin_booking_lookup_failed", "client_ip": _client_ip()},
         )
-        .scalars()
-        .all()
+        return (
+            _render_booking_list(lookup_error=ACCESS_CODE_LOOKUP_FAILED),
+            200,
+        )
+
+    logger.info(
+        "Administrator access-code lookup succeeded.",
+        extra={
+            "event": "admin_booking_lookup_success",
+            "client_ip": _client_ip(),
+        },
     )
-    negative_remaining_booking_ids = set(
-        db_session.execute(
-            select(BookingSelection.booking_id)
-            .join(
-                InventoryItem,
-                InventoryItem.id == BookingSelection.inventory_item_id,
-            )
-            .where(
-                BookingSelection.selected_quantity > InventoryItem.stock_quantity
-            )
-        ).scalars()
-    )
-    return render_template(
-        "admin/booking_list.html",
-        bookings=bookings,
-        negative_remaining_booking_ids=negative_remaining_booking_ids,
-    )
+    return redirect(url_for("admin.booking_detail", booking_id=booking.id))
 
 
 @bp.get("/bookings/new")
@@ -245,6 +263,41 @@ def booking_detail(booking_id: int):
     return _render_booking_detail(_booking_or_404(booking_id))
 
 
+@bp.post("/bookings/<int:booking_id>")
+@admin_required
+def booking_update(booking_id: int):
+    booking = _booking_or_404(booking_id)
+    values, errors = _booking_values_from_request()
+    if errors:
+        return _render_booking_detail(
+            booking,
+            event_date_value=str(values["event_date"]),
+            event_date_errors=errors,
+        )
+
+    event_date = values["event_date"]
+    assert isinstance(event_date, date)
+    booking.event_date = event_date
+    booking.updated_at = naive_utc(current_app.extensions["clock"].now())
+    db_session = get_session()
+    try:
+        db_session.commit()
+    except SQLAlchemyError:
+        db_session.rollback()
+        logger.exception(
+            "Updating booking event date could not be committed.",
+            extra={"event": "admin_booking_date_update_failed"},
+        )
+        return _render_booking_detail(
+            booking,
+            event_date_value=event_date.isoformat(),
+            event_date_errors={
+                "form": "The event date could not be saved. Try again."
+            },
+        )
+    return redirect(url_for("admin.booking_detail", booking_id=booking.id))
+
+
 @bp.post("/bookings/<int:booking_id>/selections/<int:item_id>")
 @admin_required
 def booking_selection_update(booking_id: int, item_id: int):
@@ -307,9 +360,8 @@ def booking_selection_update(booking_id: int, item_id: int):
 @bp.get("/bookings/<int:booking_id>/delete")
 @admin_required
 def booking_delete_confirm(booking_id: int):
-    return render_template(
-        "admin/booking_delete.html", booking=_booking_or_404(booking_id)
-    )
+    booking = _booking_or_404(booking_id)
+    return _render_booking_delete(booking)
 
 
 @bp.post("/bookings/<int:booking_id>/delete")
@@ -317,8 +369,8 @@ def booking_delete_confirm(booking_id: int):
 def booking_delete(booking_id: int):
     booking = _booking_or_404(booking_id)
     db_session = get_session()
-    # Both statements commit or roll back together. The foreign-key cascade
-    # is a second database-level guarantee for session invalidation.
+    # Sessions and the booking (which cascades selections) commit or roll back
+    # together. The foreign-key cascade is a second database-level guarantee.
     db_session.execute(delete(WebSession).where(WebSession.booking_id == booking.id))
     db_session.delete(booking)
     try:
@@ -328,9 +380,8 @@ def booking_delete(booking_id: int):
         logger.exception(
             "Deleting booking %s could not be committed.", booking.public_reference
         )
-        return render_template(
-            "admin/booking_delete.html",
-            booking=booking,
+        return _render_booking_delete(
+            booking,
             error="The booking could not be deleted. Try again.",
         )
     return redirect(url_for("admin.booking_list"))
@@ -621,18 +672,84 @@ def _render_booking_form(
     )
 
 
+def _render_booking_list(*, lookup_error: str | None = None):
+    when = request.args.get("when", "upcoming")
+    if when not in BOOKING_WHEN_VALUES:
+        when = "upcoming"
+    query_text = request.args.get("q", "").strip()
+    today = chicago_date(current_app.extensions["clock"].now())
+
+    statement = select(Booking)
+    if when == "upcoming":
+        statement = statement.where(Booking.event_date >= today)
+    elif when == "past":
+        statement = statement.where(Booking.event_date < today)
+
+    if query_text:
+        escaped = (
+            query_text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        pattern = f"%{escaped}%"
+        statement = statement.where(
+            Booking.public_reference.ilike(pattern, escape="\\")
+        )
+
+    db_session = get_session()
+    bookings = (
+        db_session
+        .execute(
+            statement.order_by(Booking.event_date.asc(), Booking.public_reference.asc())
+        )
+        .scalars()
+        .all()
+    )
+    totals_by_id = booking_list_totals(
+        db_session, [booking.id for booking in bookings]
+    )
+    rows = [
+        {
+            "booking": booking,
+            "totals": totals_by_id.get(booking.id, BookingListTotals()),
+        }
+        for booking in bookings
+    ]
+    return render_template(
+        "admin/booking_list.html",
+        rows=rows,
+        when=when,
+        query_text=query_text,
+        lookup_error=lookup_error,
+    )
+
+
 def _render_booking_detail(
     booking: Booking,
     *,
     selection_errors: dict[int, str] | None = None,
     selection_values: dict[int, str] | None = None,
+    event_date_value: str | None = None,
+    event_date_errors: dict[str, str] | None = None,
 ):
+    items = admin_basket_items(get_session(), booking.id)
+    preparation_items = [row for row in items if row.selected_quantity > 0]
     return render_template(
         "admin/booking_detail.html",
         booking=booking,
-        items=admin_basket_items(get_session(), booking.id),
+        items=items,
+        preparation_items=preparation_items,
         selection_errors=selection_errors or {},
         selection_values=selection_values or {},
+        event_date_value=event_date_value or booking.event_date.isoformat(),
+        event_date_errors=event_date_errors or {},
+    )
+
+
+def _render_booking_delete(booking: Booking, *, error: str | None = None):
+    return render_template(
+        "admin/booking_delete.html",
+        booking=booking,
+        selection_count=selection_count(get_session(), booking.id),
+        error=error,
     )
 
 

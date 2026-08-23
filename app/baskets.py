@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Booking, BookingSelection, InventoryItem
@@ -24,6 +24,16 @@ class BasketItem:
     @property
     def has_negative_remaining(self) -> bool:
         return self.remaining_quantity < 0
+
+
+@dataclass(frozen=True)
+class BookingListTotals:
+    """Per-booking selection aggregates for the administrator work queue."""
+
+    item_types: int = 0
+    units: int = 0
+    has_negative_remaining: bool = False
+    has_hidden_item: bool = False
 
 
 def parse_selected_quantity(raw_value: str) -> tuple[int | None, str | None]:
@@ -63,6 +73,86 @@ def admin_basket_items(session: Session, booking_id: int) -> list[BasketItem]:
         session,
         booking_id,
         include_hidden_selected=True,
+    )
+
+
+def booking_list_totals(
+    session: Session, booking_ids: list[int]
+) -> dict[int, BookingListTotals]:
+    """Return selection counts and warnings grouped by each booking id."""
+
+    if not booking_ids:
+        return {}
+
+    totals: dict[int, BookingListTotals] = {
+        booking_id: BookingListTotals() for booking_id in booking_ids
+    }
+    count_rows = session.execute(
+        select(
+            BookingSelection.booking_id,
+            func.count().label("item_types"),
+            func.coalesce(func.sum(BookingSelection.selected_quantity), 0).label(
+                "units"
+            ),
+        )
+        .where(BookingSelection.booking_id.in_(booking_ids))
+        .group_by(BookingSelection.booking_id)
+    ).all()
+    for booking_id, item_types, units in count_rows:
+        current = totals[booking_id]
+        totals[booking_id] = BookingListTotals(
+            item_types=int(item_types),
+            units=int(units),
+            has_negative_remaining=current.has_negative_remaining,
+            has_hidden_item=current.has_hidden_item,
+        )
+
+    negative_ids = set(
+        session.execute(
+            select(BookingSelection.booking_id)
+            .join(
+                InventoryItem,
+                InventoryItem.id == BookingSelection.inventory_item_id,
+            )
+            .where(
+                BookingSelection.booking_id.in_(booking_ids),
+                BookingSelection.selected_quantity > InventoryItem.stock_quantity,
+            )
+            .group_by(BookingSelection.booking_id)
+        ).scalars()
+    )
+    hidden_ids = set(
+        session.execute(
+            select(BookingSelection.booking_id)
+            .join(
+                InventoryItem,
+                InventoryItem.id == BookingSelection.inventory_item_id,
+            )
+            .where(
+                BookingSelection.booking_id.in_(booking_ids),
+                InventoryItem.is_visible.is_(False),
+            )
+            .group_by(BookingSelection.booking_id)
+        ).scalars()
+    )
+    for booking_id in booking_ids:
+        current = totals[booking_id]
+        totals[booking_id] = BookingListTotals(
+            item_types=current.item_types,
+            units=current.units,
+            has_negative_remaining=booking_id in negative_ids,
+            has_hidden_item=booking_id in hidden_ids,
+        )
+    return totals
+
+
+def selection_count(session: Session, booking_id: int) -> int:
+    return int(
+        session.execute(
+            select(func.count())
+            .select_from(BookingSelection)
+            .where(BookingSelection.booking_id == booking_id)
+        ).scalar_one()
     )
 
 
