@@ -487,11 +487,12 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
     assert result["outcome"] == "passed"
     assert result["rapid_quantity"] == 3
     assert result["retry_visible"] is True
+    assert result["stale_draft_preserved"] is True
     assert result["mobile"]["noOverflow"] is True
     assert result["desktop"]["noOverflow"] is True
 
     with app.app_context():
         selection = get_session().get(BookingSelection, (1, 1))
         assert selection is not None
-        assert selection.selected_quantity == 3
-        assert get_session().get(Booking, 1).revision == 3
+        assert selection.selected_quantity == 5
+        assert get_session().get(Booking, 1).revision == 4

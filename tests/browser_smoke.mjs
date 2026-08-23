@@ -150,6 +150,64 @@ try {
     "Rapid changes did not settle on the newest quantity",
   );
 
+  await evaluate(`(() => {
+    const originalFetch = window.fetch.bind(window);
+    let staleOnce = true;
+    window.fetch = async function (resource, init) {
+      const url = String(resource);
+      if (staleOnce && url.includes("/customer/selections/")) {
+        staleOnce = false;
+        const revision = Number(
+          document.querySelector("[data-basket-root]").dataset.revision,
+        );
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            code: "stale_revision",
+            message:
+              "This basket changed elsewhere. Current values were refreshed; review them and retry your change.",
+            revision,
+            selections: {
+              "${itemId}": {
+                quantity: 9,
+                stock_quantity: 5,
+                remaining_quantity: -4,
+              },
+            },
+            totals: { item_types: 1, units: 9 },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return originalFetch(resource, init);
+    };
+    const input = document.querySelector("#quantity-${itemId}");
+    input.value = "4";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.value = "5";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  })()`);
+  await waitFor(
+    `(() => {
+      const card = document.querySelector('[data-item-id="${itemId}"]');
+      return card.querySelector('[data-save-status]').getAttribute('role') === 'alert'
+        && !card.querySelector('[data-retry]').hidden
+        && card.querySelector('[data-quantity-input]').value === '5';
+    })()`,
+    "Stale revision overwrote the newer in-flight quantity draft",
+  );
+  await evaluate(`document.querySelector('[data-item-id="${itemId}"] [data-retry]').click()`);
+  await waitFor(
+    `(() => {
+      const card = document.querySelector('[data-item-id="${itemId}"]');
+      return card.querySelector('[data-save-status]').textContent === 'Saved'
+        && card.querySelector('[data-quantity-input]').value === '5'
+        && document.querySelector('#basket-units').textContent === '5';
+    })()`,
+    "Retry after a stale revision did not save the preserved draft",
+  );
+
   await navigate(`${baseUrl}/customer/portal?view=basket`);
   const persisted = await evaluate(`(() => ({
     value: document.querySelector('#quantity-${itemId}')?.value,
@@ -158,9 +216,9 @@ try {
     currentView: document.querySelector('.basket-toggle [aria-current="page"]')?.textContent,
   }))()`);
   assert(
-    persisted.value === "3" &&
+    persisted.value === "5" &&
       persisted.types === "1" &&
-      persisted.units === "3" &&
+      persisted.units === "5" &&
       persisted.currentView.trim() === "My basket",
   );
 
@@ -203,6 +261,7 @@ try {
       outcome: "passed",
       rapid_quantity: 3,
       retry_visible: true,
+      stale_draft_preserved: true,
       mobile,
       desktop,
     }),

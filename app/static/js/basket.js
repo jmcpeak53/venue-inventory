@@ -187,7 +187,7 @@
   function handleStale(state, sentQuantity, payload) {
     const desired = state.pending ?? sentQuantity;
     state.pending = null;
-    applySnapshot(payload, pendingIds());
+    applySnapshot(payload, new Set([state.id, ...pendingIds()]));
     state.lastAttempt = desired;
     showError(state, payload.message, true);
   }
