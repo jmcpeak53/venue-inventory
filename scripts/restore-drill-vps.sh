@@ -46,8 +46,12 @@ docker compose run --rm --no-deps --entrypoint python \
 import os
 from app import create_app
 from app.config import AppConfig
+from app.migrate import upgrade_to_head
 
 config = AppConfig.from_environ(os.environ)
+# Live restore migrates on startup. Apply the same upgrade so a pre-migration
+# archive (the deploy-time backup) still becomes ready against this image.
+upgrade_to_head(config.database_url)
 application = create_app(config)
 client = application.test_client()
 for path, expected in (

@@ -135,8 +135,11 @@ ssh prod-vps-01 'cd /opt/venue-inventory && ./scripts/restore-drill-vps.sh /opt/
 
 Replace `ARCHIVE.tar.gz` with the filename printed by the backup command.
 The drill restores into a temporary directory, checks that rows and image
-bytes match the archive, and issues readiness plus home, administrator
+bytes match the archive, applies schema migrations the same way a live
+restore does on startup, and issues readiness plus home, administrator
 sign-in, and customer sign-in HTTP requests against that isolated copy.
+That migration step is required so a pre-deployment backup taken before a
+schema-changing deploy still reports ready after the drill.
 
 ### Restore live data
 

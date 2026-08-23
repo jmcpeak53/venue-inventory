@@ -9,21 +9,28 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from alembic import command
+from app import create_app
 from app.backups import (
     BackupError,
     create_backup,
     prune_backups,
     restore_backup,
+    rollback_restore,
     run_restore_drill,
     verify_backup,
 )
+from app.clock import FrozenClock
+from app.config import AppConfig
 from app.db import get_session
 from app.images import image_directory
+from app.migrate import alembic_config, upgrade_to_head
 from app.models import InventoryItem
+from app.rate_limit import MemoryRateLimitStore
 from app.times import naive_utc
 from PIL import Image
 from sqlalchemy import text
-from tests.conftest import csrf_token, sign_in
+from tests.conftest import TEST_HASH, csrf_token, sign_in
 
 GIT_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BACKUP_TIME = datetime(2026, 8, 23, 3, 15, tzinfo=UTC)
@@ -183,6 +190,106 @@ def test_restore_preserves_prior_data_and_isolated_drill_reproduces_bytes(
         run_restore_drill(archive=archive, target_data_dir=target)
 
 
+def test_rollback_restore_returns_live_data_to_pre_restore_state(
+    app, app_config, tmp_path: Path
+) -> None:
+    filename = _seed_image_item(app, app_config.data_dir)
+    archive = create_backup(
+        data_dir=app_config.data_dir,
+        backup_root=tmp_path / "backups",
+        git_sha=GIT_SHA,
+        now=BACKUP_TIME,
+    )
+    with app.app_context():
+        now = naive_utc(datetime(2026, 8, 24, tzinfo=UTC))
+        session = get_session()
+        session.add(
+            InventoryItem(
+                name="Changed after backup",
+                description=None,
+                stock_quantity=2,
+                image_filename=None,
+                is_visible=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+    (image_directory(app_config.data_dir) / filename).write_bytes(b"changed-image")
+    wal = app_config.data_dir / "venue-inventory.sqlite3-wal"
+    shm = app_config.data_dir / "venue-inventory.sqlite3-shm"
+    if not wal.is_file():
+        wal.write_bytes(b"prior-wal")
+    if not shm.is_file():
+        shm.write_bytes(b"prior-shm")
+    pre_restore = {
+        "database": app_config.database_path.read_bytes(),
+        "image": (image_directory(app_config.data_dir) / filename).read_bytes(),
+        "wal": wal.read_bytes(),
+        "shm": shm.read_bytes(),
+    }
+
+    prior = restore_backup(archive=archive, data_dir=app_config.data_dir)
+    live = sqlite3.connect(app_config.database_path)
+    try:
+        assert live.execute("SELECT COUNT(*) FROM inventory_items").fetchone() == (1,)
+    finally:
+        live.close()
+    assert (image_directory(app_config.data_dir) / filename).read_bytes() != (
+        pre_restore["image"]
+    )
+
+    rollback_restore(data_dir=app_config.data_dir, prior_name=prior.name)
+
+    assert app_config.database_path.read_bytes() == pre_restore["database"]
+    assert (image_directory(app_config.data_dir) / filename).read_bytes() == (
+        pre_restore["image"]
+    )
+    assert wal.is_file() and wal.read_bytes() == pre_restore["wal"]
+    assert shm.is_file() and shm.read_bytes() == pre_restore["shm"]
+    restored = sqlite3.connect(app_config.database_path)
+    try:
+        names = [
+            row[0]
+            for row in restored.execute(
+                "SELECT name FROM inventory_items ORDER BY name"
+            )
+        ]
+    finally:
+        restored.close()
+    assert names == ["Backup chair", "Changed after backup"]
+    assert not prior.exists()
+    assert list(app_config.data_dir.glob(".restore-prior-*")) == []
+    assert list(app_config.data_dir.glob(".restore-failed-*")) == []
+
+
+def test_isolated_restore_smoke_migrates_pre_head_schema_before_readyz(
+    app, app_config, tmp_path: Path
+) -> None:
+    _seed_image_item(app, app_config.data_dir)
+    archive = create_backup(
+        data_dir=app_config.data_dir,
+        backup_root=tmp_path / "backups",
+        git_sha=GIT_SHA,
+        now=BACKUP_TIME,
+    )
+    target = tmp_path / "isolated-pre-head"
+    run_restore_drill(archive=archive, target_data_dir=target)
+    database_url = "sqlite:///" + (target / "venue-inventory.sqlite3").as_posix()
+    command.downgrade(alembic_config(database_url), "0003_bookings")
+
+    stale = _isolated_client(target)
+    assert stale.get("/readyz").status_code == 503
+    assert stale.get("/healthz").status_code == 200
+    assert stale.get("/").status_code == 200
+
+    upgrade_to_head(database_url)
+    ready = _isolated_client(target)
+    for path in ("/healthz", "/readyz", "/", "/admin/login", "/customer/login"):
+        response = ready.get(path)
+        assert response.status_code == 200, path
+
+
 def test_prune_only_removes_recognized_old_archives(tmp_path: Path) -> None:
     root = tmp_path / "dedicated-backups"
     root.mkdir()
@@ -327,3 +434,22 @@ def _webp_upload() -> BytesIO:
     Image.new("RGB", (2, 2), (40, 50, 60)).save(output, format="WEBP")
     output.seek(0)
     return output
+
+
+def _isolated_client(data_dir: Path):
+    config = AppConfig(
+        secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
+        admin_password_hash=TEST_HASH,
+        data_dir=data_dir,
+        session_cookie_secure=False,
+        trust_proxy=False,
+        require_data_mount=False,
+        log_level="WARNING",
+    )
+    application = create_app(
+        config,
+        clock=FrozenClock(datetime(2026, 8, 22, 15, 0, tzinfo=UTC)),
+        rate_limit_store=MemoryRateLimitStore(),
+    )
+    return application.test_client()

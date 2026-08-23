@@ -48,7 +48,10 @@ else
   cd "$deploy_directory"
 fi
 
-mkdir -p "${VENUE_INVENTORY_BACKUP_DIR:-$deploy_directory/backups}"
+backup_dir="${VENUE_INVENTORY_BACKUP_DIR:-$deploy_directory/backups}"
+mkdir -p "$backup_dir"
+# Bind mounts keep host ownership; the backup container runs as uid 1000.
+chown 1000:1000 "$backup_dir"
 
 echo "Building the replacement image before backup and migration"
 if ! docker compose build web; then

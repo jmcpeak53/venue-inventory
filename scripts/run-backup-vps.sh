@@ -7,6 +7,8 @@ cd "$root"
 retention_days="${VENUE_INVENTORY_BACKUP_RETENTION_DAYS:-14}"
 host_backup_dir="${VENUE_INVENTORY_BACKUP_DIR:-$root/backups}"
 mkdir -p "$host_backup_dir"
+# Bind mounts keep host ownership; the backup container runs as uid 1000.
+chown 1000:1000 "$host_backup_dir"
 git_sha="${VENUE_INVENTORY_DEPLOYED_GIT_SHA:-}"
 if [[ -z "$git_sha" ]]; then
   git_sha="$(git rev-parse HEAD)"
