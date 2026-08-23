@@ -12,15 +12,49 @@
       <a class="button compact-button" href="{{ url_for('admin.booking_new') }}">Create booking</a>
     </div>
 
-    {% if bookings %}
+    <form class="catalog-filters" method="get" action="{{ url_for('admin.booking_list') }}">
+      <div class="field compact-field">
+        <label for="booking-search">Search by reference</label>
+        <input id="booking-search" name="q" type="search" value="{{ query_text }}" autocomplete="off" aria-describedby="booking-search-hint">
+        <p class="field-hint" id="booking-search-hint">Matches the non-secret booking reference shown on each row.</p>
+      </div>
+      <div class="field compact-field">
+        <label for="when">Show</label>
+        <select id="when" name="when">
+          <option value="upcoming" {% if when == 'upcoming' %}selected{% endif %}>Upcoming</option>
+          <option value="past" {% if when == 'past' %}selected{% endif %}>Past</option>
+          <option value="all" {% if when == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </div>
+      <button class="compact-button" type="submit">Apply</button>
+    </form>
+
+    <form class="catalog-filters booking-code-lookup" method="post" action="{{ url_for('admin.booking_lookup') }}" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field compact-field">
+        <label for="access_code">Exact access-code lookup</label>
+        <input id="access_code" name="access_code" type="text" inputmode="text" autocomplete="off" spellcheck="false" aria-describedby="access-code-hint{% if lookup_error %} access-code-error{% endif %}" {% if lookup_error %}aria-invalid="true"{% endif %}>
+        <p class="field-hint" id="access-code-hint">Submitted by POST only. The code is never shown in the page address or saved booking list.</p>
+        {% if lookup_error %}<p class="field-error" id="access-code-error" role="alert">{{ lookup_error }}</p>{% endif %}
+      </div>
+      <button class="compact-button" type="submit">Find booking</button>
+    </form>
+
+    {% if rows %}
       <div class="booking-list">
-        {% for booking in bookings %}
+        {% for row in rows %}
+          {% set booking = row.booking %}
+          {% set totals = row.totals %}
           <article class="booking-row">
             <div>
               <h2><a href="{{ url_for('admin.booking_detail', booking_id=booking.id) }}">{{ booking.public_reference }}</a></h2>
               <p class="item-description">Event date: {{ booking.event_date }}</p>
-              {% if booking.id in negative_remaining_booking_ids %}
+              <p class="item-quantity">{{ totals.item_types }} item type{% if totals.item_types != 1 %}s{% endif %} · {{ totals.units }} unit{% if totals.units != 1 %}s{% endif %}</p>
+              {% if totals.has_negative_remaining %}
                 <p class="inline-warning" role="alert">Negative remaining: one or more selections exceed current stock.</p>
+              {% endif %}
+              {% if totals.has_hidden_item %}
+                <p class="inline-warning" role="alert">Hidden item: one or more selections are hidden from customers.</p>
               {% endif %}
             </div>
             <p class="booking-created">Last updated {{ booking.updated_at }} UTC</p>
@@ -28,7 +62,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="empty-state">No bookings yet.</p>
+      <p class="empty-state">No bookings match these filters.</p>
     {% endif %}
   </section>
 {% endblock %}

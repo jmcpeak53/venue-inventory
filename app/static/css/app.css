@@ -832,4 +832,138 @@ input:disabled {
   .admin-quantity-form {
     grid-column: 1 / -1;
   }
+
+  .event-date-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.booking-code-lookup {
+  margin-top: 1rem;
+}
+
+.event-date-form {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgb(17 26 23 / 40%);
+}
+
+.event-date-form .compact-button {
+  margin-top: 0;
+}
+
+.preparation-toolbar {
+  margin-top: 1.25rem;
+}
+
+.preparation-list {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgb(17 26 23 / 40%);
+}
+
+.preparation-heading {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+
+.preparation-items {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.preparation-item {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: rgb(17 26 23 / 46%);
+}
+
+.preparation-item h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.delete-summary {
+  margin: 1.25rem 0;
+  text-align: left;
+}
+
+@media print {
+  body {
+    min-height: 0;
+    padding: 0;
+    background: #fff;
+    color: #111;
+  }
+
+  .skip-link,
+  .site-header,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    display: block;
+  }
+
+  .panel,
+  .booking-detail-panel,
+  .preparation-list,
+  .preparation-item {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .booking-detail-panel .page-heading {
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+
+  .booking-summary {
+    text-align: left;
+  }
+
+  .booking-summary dt,
+  .booking-summary dd,
+  .preparation-heading,
+  .preparation-item h3,
+  .item-quantity,
+  .inline-warning,
+  .badge {
+    color: #111;
+  }
+
+  .preparation-list {
+    margin-top: 0;
+  }
+
+  .preparation-item {
+    break-inside: avoid;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .inline-warning {
+    border-color: #666;
+  }
+
+  .negative-remaining-value {
+    color: #000;
+    font-weight: 800;
+  }
 }

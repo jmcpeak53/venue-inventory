@@ -6,7 +6,12 @@
   <section class="panel form-panel">
     <p class="eyebrow">Permanent action</p>
     <h1>Delete booking?</h1>
-    <p>This permanently deletes <strong>{{ booking.public_reference }}</strong>, signs out its booking party, and makes its access code unusable.</p>
+    <p>This permanently deletes the booking, signs out its booking party, removes its selections, and makes its access code unusable.</p>
+    <dl class="booking-summary delete-summary">
+      <div><dt>Reference</dt><dd>{{ booking.public_reference }}</dd></div>
+      <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
+      <div><dt>Selections</dt><dd>{{ selection_count }} item type{% if selection_count != 1 %}s{% endif %}</dd></div>
+    </dl>
     {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
     <form method="post" action="{{ url_for('admin.booking_delete', booking_id=booking.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

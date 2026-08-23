@@ -86,7 +86,7 @@ def test_admin_creates_booking_with_date_and_persists_only_digest(
     assert sign_in(client).status_code == 302
     code = create_booking(client, "1900-01-01")
     created_body = client.get("/admin/bookings/1").get_data(as_text=True)
-    list_body = client.get("/admin/bookings").get_data(as_text=True)
+    list_body = client.get("/admin/bookings?when=all").get_data(as_text=True)
     assert code not in created_body
     assert code not in list_body
     assert "B-0001" in created_body

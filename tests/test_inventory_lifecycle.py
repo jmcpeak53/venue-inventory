@@ -103,9 +103,9 @@ def test_stock_reduction_preserves_each_selection_and_warns_only_affected_bookin
 
     booking_list = client.get("/admin/bookings").get_data(as_text=True)
     assert "Negative remaining: one or more selections exceed current stock." in article_containing(
-        booking_list, "B-0001"
+        booking_list, ">B-0001</a>"
     )
-    assert "Negative remaining" not in article_containing(booking_list, "B-0002")
+    assert "Negative remaining" not in article_containing(booking_list, ">B-0002</a>")
 
     with app.app_context():
         first_selection = get_session().get(BookingSelection, (1, 1))
