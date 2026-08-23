@@ -1,0 +1,14 @@
+[Unit]
+Description=Venue Inventory backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@DEPLOY_DIRECTORY@
+ExecStartPre=/bin/mkdir -p @DEPLOY_DIRECTORY@/backups
+ExecStartPre=/bin/chown 1000:1000 @DEPLOY_DIRECTORY@/backups
+ExecStart=@DEPLOY_DIRECTORY@/scripts/run-backup-vps.sh
+
+[Install]
+WantedBy=multi-user.target

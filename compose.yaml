@@ -16,8 +16,10 @@ services:
       VENUE_INVENTORY_TRUST_PROXY: ${VENUE_INVENTORY_TRUST_PROXY:-false}
       VENUE_INVENTORY_REQUIRE_DATA_MOUNT: ${VENUE_INVENTORY_REQUIRE_DATA_MOUNT:-true}
       VENUE_INVENTORY_LOG_LEVEL: ${VENUE_INVENTORY_LOG_LEVEL:-INFO}
+      VENUE_INVENTORY_DEPLOYED_GIT_SHA: ${VENUE_INVENTORY_DEPLOYED_GIT_SHA:-}
     volumes:
       - venue-inventory-data:/data
+      - ${VENUE_INVENTORY_BACKUP_DIR:-./backups}:/backups
     healthcheck:
       test:
         [

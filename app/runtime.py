@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from app.config import AppConfig, ConfigError
-from app.data_dir import data_dir_is_ready
+from app.data_dir import data_dir_is_ready, ensure_data_layout
 from app.logging import configure_logging
 from app.migrate import upgrade_to_head
 
@@ -20,6 +20,17 @@ def prepare_runtime(environ: dict[str, str] | None = None) -> None:
             extra={
                 "event": "data_dir_unready",
                 "reason": reason,
+                "data_dir": str(config.data_dir),
+            },
+        )
+        return
+    try:
+        ensure_data_layout(config)
+    except OSError:
+        logger.exception(
+            "Persistent data layout could not be prepared; skipping migrations.",
+            extra={
+                "event": "data_layout_unready",
                 "data_dir": str(config.data_dir),
             },
         )

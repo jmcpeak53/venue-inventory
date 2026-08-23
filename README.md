@@ -3,8 +3,8 @@
 A self-hosted web app for managing venue inventory. This slice is a Flask
 application with SQLite persistence, a protected administrator catalog and
 anonymous booking work queue, customer access-code login, independently
-evaluated live booking baskets, printable preparation lists, and container
-health checks.
+evaluated live booking baskets, printable preparation lists, container
+health checks, and verified backup and restore of the database and images.
 
 ## Status
 
@@ -36,7 +36,10 @@ without extra files:
 - Access-code HMAC secret: a local development default is supplied
 - Session cookies are not marked `Secure` (this machine is serving HTTP)
 - SQLite, session rows, and normalized catalog images are stored in the
-  `venue-inventory-data` Docker volume
+  `venue-inventory-data` Docker volume as `/data/venue-inventory.sqlite3`
+  and `/data/images`
+- Verified backups are written to a separate directory mounted at `/backups`
+  (local default: `./backups`)
 
 Those defaults are only for local use. Before any shared installation, copy
 `.env.example` to `.env` and replace the Flask secret key, access-code HMAC
@@ -184,6 +187,9 @@ Node, or a localhost test socket. To run them on a developer machine:
 The smoke test creates a temporary database and browser profile; it does not
 use or change the running application's data.
 
+Backup and restore tests use a temporary data directory. They do not read or
+write the live Docker volume or the VPS backup timer.
+
 On a machine with Docker, this host script runs those same checks and then
 starts a throwaway Compose project to probe liveness, readiness, and data
 after container replacement:
@@ -196,19 +202,24 @@ after container replacement:
 
 | Path | Purpose |
 |---|---|
-| `app/` | Flask application factory, configuration, persistence, and views. |
+| `app/` | Flask application factory, configuration, persistence, backup, and views. |
 | `app/templates/` | Jinja pages for administrator catalog/booking work and customer access/baskets. |
 | `app/static/css/` and `app/static/js/` | Responsive styling and serialized basket autosave behavior. |
 | `migrations/` | Alembic schema history for sessions, catalog items, bookings, and selections. |
-| `tests/` | HTTP integration and optional real-browser tests for auth, bookings, baskets, catalog, health, and migrations. |
+| `tests/` | HTTP integration and optional real-browser tests for auth, bookings, baskets, catalog, health, migrations, and backup/restore. |
 | `scripts/verify.sh` | Tests and (on the host) container health probes. |
 | `scripts/entrypoint.sh` | Validates configuration and applies migrations before Gunicorn. |
-| `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
+| `scripts/deploy-vps.sh` | Pull, verified pre-deployment backup, rebuild, restart, and verify the VPS service. |
+| `scripts/run-backup-vps.sh` | Create and prune verified backups (nightly timer and coding-agent use). |
+| `scripts/restore-vps.sh` | Stop writes, restore a verified archive, and confirm readiness. |
+| `scripts/restore-drill-vps.sh` | Isolated restore that cannot overwrite live data. |
+| `scripts/install-backup-timer-vps.sh` | Idempotent nightly systemd timer installation. |
+| `systemd/` | Nightly backup service and timer unit templates. |
 | `compose.yaml` | Local and VPS `web` runtime service, plus a `verify` profile for checks. |
 | `Dockerfile` | Non-root Flask/Gunicorn runtime image plus a verification stage. |
 | `requirements.lock` | Locked runtime dependencies. |
 | `requirements-dev.lock` | Locked runtime plus pytest. |
-| `docs/deployment.md` | VPS deployment and recovery runbook. |
+| `docs/deployment.md` | VPS deployment, backup, restore, and recovery runbook. |
 | `docs/prd/` | Approved product requirements used to derive implementation work. |
 | `docs/plans/` | Implementation plans for focused, agent-ready work. |
 | `docs/agents/` | Issue tracker, triage label, and domain-document conventions. |
@@ -216,7 +227,10 @@ after container replacement:
 
 ## Deployment
 
-The current VPS workflow is unchanged: after pushing a commit, deploy with
-`./scripts/deploy-vps.sh`. See [docs/deployment.md](docs/deployment.md).
-HTTPS, Caddy, and production secret management remain later slices. Do not
-use the local default password on a public server.
+A coding agent owns deployment, backup, restore, and the nightly timer. After
+pushing a commit, the agent deploys with `./scripts/deploy-vps.sh`, which
+creates a verified backup before migrations run. See
+[docs/deployment.md](docs/deployment.md) for restore, the isolated restore
+drill, and the same-VPS backup limit. HTTPS, Caddy, offsite copies, and
+production secret management remain later slices. Do not use the local
+default password on a public server.

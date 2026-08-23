@@ -40,6 +40,7 @@ def test_prepare_runtime_logs_head_revision(
     output = capsys.readouterr().out
     assert "migrations_applied" in output
     assert "0004_booking_selections" in output
+    assert (data_dir / "images").is_dir()
 
 
 def test_prepare_runtime_skips_migration_when_data_dir_missing(
