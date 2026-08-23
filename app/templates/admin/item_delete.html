@@ -6,17 +6,33 @@
   <section class="panel form-panel">
     <p class="eyebrow">Administrator catalog</p>
     <h1>Delete item?</h1>
-    <p>
-      This permanently deletes <strong>{{ item.name }}</strong>{% if item.image_filename %}
-      and its stored image{% endif %}. This action cannot be undone.
-    </p>
     {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
-    <form method="post" action="{{ url_for('admin.item_delete', item_id=item.id) }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if blocking_bookings %}
+      <p>
+        <strong>{{ item.name }}</strong> cannot be permanently deleted because these current or future bookings select it:
+      </p>
+      <ul class="warning-list" aria-label="Bookings blocking item deletion">
+        {% for booking in blocking_bookings %}
+          <li><strong>{{ booking.public_reference }}</strong> — event date {{ booking.event_date }}</li>
+        {% endfor %}
+      </ul>
+      <p>Hide the item instead so it leaves customer browsing while these saved selections remain available to administrators.</p>
       <div class="form-actions">
-        <button class="danger-button" type="submit">Delete item permanently</button>
-        <a class="text-action" href="{{ url_for('admin.item_detail', item_id=item.id) }}">Cancel</a>
+        <a class="button secondary-button" href="{{ url_for('admin.item_detail', item_id=item.id) }}">Return to item details</a>
       </div>
-    </form>
+    {% else %}
+      <p>
+        This permanently deletes <strong>{{ item.name }}</strong>{% if item.image_filename %}
+        and its stored image{% endif %}. Any selections belonging only to past bookings are removed; the bookings remain. This action cannot be undone.
+      </p>
+      <form method="post" action="{{ url_for('admin.item_delete', item_id=item.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-actions">
+          <button class="danger-button" type="submit">Delete item permanently</button>
+          <a class="text-action" href="{{ url_for('admin.item_detail', item_id=item.id) }}">Cancel</a>
+        </div>
+      </form>
+    {% endif %}
   </section>
 {% endblock %}

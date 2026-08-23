@@ -40,6 +40,8 @@ sqlalchemy==2.0.52
     # via
     #   alembic
     #   venue-inventory
+tzdata==2026.3
+    # via venue-inventory
 typing-extensions==4.16.0
     # via
     #   alembic

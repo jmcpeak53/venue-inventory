@@ -20,9 +20,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.access_codes import access_code_digest, is_valid_access_code
 from app.baskets import (
     basket_snapshot,
+    customer_basket_items,
     parse_selected_quantity,
     replace_selection,
-    visible_basket_items,
 )
 from app.db import get_session
 from app.models import Booking, InventoryItem, WebSession
@@ -70,7 +70,7 @@ def portal(*, booking: Booking):
     if view_mode not in {"all", "basket"}:
         view_mode = "all"
     db_session = get_session()
-    items = visible_basket_items(
+    items = customer_basket_items(
         db_session,
         booking.id,
         query_text=query_text,
@@ -137,10 +137,7 @@ def selection_update(item_id: int, *, booking: Booking):
             )
 
         item = db_session.execute(
-            select(InventoryItem).where(
-                InventoryItem.id == item_id,
-                InventoryItem.is_visible.is_(True),
-            )
+            select(InventoryItem).where(InventoryItem.id == item_id)
         ).scalar_one_or_none()
         if item is None:
             db_session.rollback()
@@ -149,6 +146,17 @@ def selection_update(item_id: int, *, booking: Booking):
                 status=404,
                 code="item_not_found",
                 message="This catalog item is no longer available.",
+            )
+        if not item.is_visible:
+            db_session.rollback()
+            return _selection_response(
+                booking.id,
+                status=409,
+                code="item_unavailable",
+                message=(
+                    "This item is unavailable. Its saved quantity is locked "
+                    "until an administrator shows it again."
+                ),
             )
         if quantity > item.stock_quantity:
             db_session.rollback()

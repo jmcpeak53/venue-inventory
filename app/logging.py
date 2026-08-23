@@ -29,6 +29,9 @@ class JsonFormatter(logging.Formatter):
         data_dir = getattr(record, "data_dir", None)
         if data_dir:
             payload["data_dir"] = data_dir
+        image_filename = getattr(record, "image_filename", None)
+        if image_filename:
+            payload["image_filename"] = image_filename
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str)

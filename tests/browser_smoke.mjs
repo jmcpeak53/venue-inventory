@@ -193,7 +193,9 @@ try {
       const card = document.querySelector('[data-item-id="${itemId}"]');
       return card.querySelector('[data-save-status]').getAttribute('role') === 'alert'
         && !card.querySelector('[data-retry]').hidden
-        && card.querySelector('[data-quantity-input]').value === '5';
+        && card.querySelector('[data-quantity-input]').value === '5'
+        && card.querySelector('[data-remaining]').textContent === '-4'
+        && !card.querySelector('[data-remaining-warning]').hidden;
     })()`,
     "Stale revision overwrote the newer in-flight quantity draft",
   );
@@ -203,6 +205,8 @@ try {
       const card = document.querySelector('[data-item-id="${itemId}"]');
       return card.querySelector('[data-save-status]').textContent === 'Saved'
         && card.querySelector('[data-quantity-input]').value === '5'
+        && card.querySelector('[data-remaining]').textContent === '0'
+        && card.querySelector('[data-remaining-warning]').hidden
         && document.querySelector('#basket-units').textContent === '5';
     })()`,
     "Retry after a stale revision did not save the preserved draft",
@@ -220,6 +224,91 @@ try {
       persisted.types === "1" &&
       persisted.units === "5" &&
       persisted.currentView.trim() === "My basket",
+  );
+
+  const hidden = await evaluate(`(async () => {
+    const csrf = document.querySelector('#basket-csrf').value;
+    const response = await fetch('/_test/items/${itemId}/toggle-visibility', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf_token: csrf }),
+      credentials: 'same-origin',
+    });
+    return response.json();
+  })()`);
+  assert(hidden.is_visible === false);
+
+  await navigate(`${baseUrl}/customer/portal`);
+  const hiddenFromBrowsing = await evaluate(
+    `!document.querySelector('[data-item-id="${itemId}"]')`,
+  );
+  assert(hiddenFromBrowsing);
+
+  await navigate(`${baseUrl}/customer/portal?view=basket`);
+  const locked = await evaluate(`(() => {
+    const card = document.querySelector('[data-item-id="${itemId}"]');
+    return {
+      card: Boolean(card),
+      unavailable: !card?.querySelector('[data-unavailable-badge]')?.hidden,
+      disabled: card?.querySelector('[data-quantity-input]')?.disabled,
+      value: card?.querySelector('[data-quantity-input]')?.value,
+    };
+  })()`);
+  assert(
+    locked.card && locked.unavailable && locked.disabled && locked.value === "5",
+  );
+
+  const craftedHiddenWrite = await evaluate(`(async () => {
+    const root = document.querySelector('[data-basket-root]');
+    const csrf = document.querySelector('#basket-csrf').value;
+    const card = document.querySelector('[data-item-id="${itemId}"]');
+    const response = await fetch(card.dataset.saveUrl, {
+      method: 'POST',
+      body: new URLSearchParams({
+        csrf_token: csrf,
+        quantity: '4',
+        revision: root.dataset.revision,
+      }),
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    const payload = await response.json();
+    return {
+      status: response.status,
+      code: payload.code,
+      quantity: payload.selections['${itemId}'].quantity,
+    };
+  })()`);
+  assert(
+    craftedHiddenWrite.status === 409 &&
+      craftedHiddenWrite.code === "item_unavailable" &&
+      craftedHiddenWrite.quantity === 5,
+  );
+
+  const shown = await evaluate(`(async () => {
+    const csrf = document.querySelector('#basket-csrf').value;
+    const response = await fetch('/_test/items/${itemId}/toggle-visibility', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf_token: csrf }),
+      credentials: 'same-origin',
+    });
+    return response.json();
+  })()`);
+  assert(shown.is_visible === true);
+  await navigate(`${baseUrl}/customer/portal`);
+  const restored = await evaluate(`(() => {
+    const card = document.querySelector('[data-item-id="${itemId}"]');
+    return {
+      card: Boolean(card),
+      unavailable: !card?.querySelector('[data-unavailable-badge]')?.hidden,
+      disabled: card?.querySelector('[data-quantity-input]')?.disabled,
+      value: card?.querySelector('[data-quantity-input]')?.value,
+    };
+  })()`);
+  assert(
+    restored.card &&
+      !restored.unavailable &&
+      !restored.disabled &&
+      restored.value === "5",
   );
 
   await cdp.send(
@@ -262,6 +351,7 @@ try {
       rapid_quantity: 3,
       retry_visible: true,
       stale_draft_preserved: true,
+      hidden_locking: true,
       mobile,
       desktop,
     }),

@@ -8,7 +8,7 @@
     <div class="page-heading">
       <div>
         <h1>{{ booking.public_reference }}</h1>
-        <p class="muted">Edit any visible catalog item. Administrator quantities may exceed stock.</p>
+        <p class="muted">Edit visible catalog items and any hidden item already selected by this booking. Administrator quantities may exceed stock.</p>
       </div>
       <dl class="booking-summary">
         <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
@@ -28,8 +28,16 @@
               <div class="image-placeholder catalog-thumbnail" role="img" aria-label="No image available">No image</div>
             {% endif %}
             <div>
-              <h2>{{ row.item.name }}</h2>
+              <div class="catalog-title-row">
+                <h2>{{ row.item.name }}</h2>
+                {% if not row.item.is_visible %}<span class="badge hidden">Hidden</span>{% endif %}
+              </div>
               <p class="item-quantity">{{ row.item.stock_quantity }} in stock</p>
+              <p class="item-quantity">Remaining for this booking: <strong class="{% if row.has_negative_remaining %}negative-remaining-value{% endif %}">{{ row.remaining_quantity }}</strong></p>
+              {% if row.has_negative_remaining %}
+                <p class="inline-warning" role="alert">Negative remaining: this booking selects more than the current stock.</p>
+              {% endif %}
+              {% if not row.item.is_visible %}<p class="inline-warning">Hidden from customers; administrator quantity controls remain available.</p>{% endif %}
               {% if row.item.description %}<p class="item-description">{{ row.item.description }}</p>{% endif %}
             </div>
             <form class="admin-quantity-form" method="post" action="{{ url_for('admin.booking_selection_update', booking_id=booking.id, item_id=row.item.id) }}">
@@ -55,7 +63,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="empty-state">There are no visible catalog items to select.</p>
+      <p class="empty-state">There are no visible catalog items or hidden selections.</p>
     {% endif %}
 
     <div class="form-actions">
