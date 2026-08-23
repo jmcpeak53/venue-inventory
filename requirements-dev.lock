@@ -48,8 +48,6 @@ pygments==2.21.0
     # via pytest
 pytest==9.1.1
     # via venue-inventory
-ruff==0.16.4
-    # via venue-inventory
 sqlalchemy==2.0.52
     # via
     #   alembic

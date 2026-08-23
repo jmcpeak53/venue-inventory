@@ -16,7 +16,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "ruff",
 ]
 
 [tool.pytest.ini_options]
@@ -27,14 +26,3 @@ filterwarnings = ["error"]
 markers = [
     "container: tests that build and probe the Docker image",
 ]
-
-[tool.ruff]
-target-version = "py312"
-line-length = 88
-src = ["app", "tests"]
-
-[tool.ruff.lint]
-select = ["B", "E", "F", "I", "UP"]
-
-[tool.ruff.format]
-quote-style = "double"

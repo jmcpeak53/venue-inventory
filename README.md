@@ -108,7 +108,7 @@ GitHub Actions and Slipstream run the same command:
 docker compose run --build --rm --no-deps verify
 ```
 
-That runs formatting, linting, tests, and migration checks in the
+That runs tests and migration checks in the
 verification image. Local `docker compose up` and VPS deploys use the
 `web` service, which is the production runtime image.
 
@@ -129,13 +129,13 @@ after container replacement:
 | `app/static/css/` | Shared responsive CSS baseline. |
 | `migrations/` | Alembic schema history. The first revision creates `web_sessions`. |
 | `tests/` | HTTP-client tests for config, auth, health, and migrations. |
-| `scripts/verify.sh` | Formatting, lint, tests, and (on the host) container health probes. |
+| `scripts/verify.sh` | Tests and (on the host) container health probes. |
 | `scripts/entrypoint.sh` | Validates configuration and applies migrations before Gunicorn. |
 | `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
 | `compose.yaml` | Local and VPS `web` runtime service, plus a `verify` profile for checks. |
 | `Dockerfile` | Non-root Flask/Gunicorn runtime image plus a verification stage. |
 | `requirements.lock` | Locked runtime dependencies. |
-| `requirements-dev.lock` | Locked runtime plus pytest and ruff. |
+| `requirements-dev.lock` | Locked runtime plus pytest. |
 | `docs/deployment.md` | VPS deployment and recovery runbook. |
 | `docs/prd/` | Approved product requirements used to derive implementation work. |
 | `docs/plans/` | Implementation plans for focused, agent-ready work. |

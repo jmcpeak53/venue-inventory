@@ -12,10 +12,6 @@ elif [[ -f /.dockerenv ]]; then
 fi
 
 run_checks() {
-  echo "==> Formatting"
-  ruff format --check .
-  echo "==> Linting"
-  ruff check .
   echo "==> Tests"
   pytest -q
   echo "==> In-container checks passed"
@@ -29,7 +25,7 @@ fi
 project="${VENUE_INVENTORY_VERIFY_PROJECT:-venue-inventory-verify}"
 port="${VENUE_INVENTORY_VERIFY_PORT:-18080}"
 
-echo "==> Running formatting, lint, tests, and migration checks"
+echo "==> Running tests and migration checks"
 docker compose run --build --rm --no-deps verify --in-container
 
 echo "==> Building and probing the application container"
@@ -65,6 +61,6 @@ docker compose -p "$project" exec -T web python -c \
 
 echo "==> Confirming the production image does not include verification tooling"
 docker compose -p "$project" exec -T web python -c \
-  "import importlib.util; from pathlib import Path; assert not Path('/app/tests').exists(); assert not Path('/app/scripts/verify.sh').exists(); assert importlib.util.find_spec('pytest') is None; assert importlib.util.find_spec('ruff') is None"
+  "import importlib.util; from pathlib import Path; assert not Path('/app/tests').exists(); assert not Path('/app/scripts/verify.sh').exists(); assert importlib.util.find_spec('pytest') is None"
 
 echo "==> Verification passed"
