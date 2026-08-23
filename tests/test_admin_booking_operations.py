@@ -12,7 +12,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from flask.testing import FlaskClient
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from werkzeug.serving import make_server
 
 from app.access_codes import normalize_access_code
@@ -208,6 +210,64 @@ def test_admin_event_date_edit_preserves_customer_access(
         booking = get_session().get(Booking, 1)
         assert booking is not None
         assert booking.event_date.isoformat() == future
+
+
+@pytest.mark.parametrize(
+    ("submitted", "message"),
+    [
+        ("", "Enter an event date."),
+        ("not-a-date", "Enter a valid event date."),
+    ],
+)
+def test_booking_update_rejects_empty_and_invalid_event_dates(
+    app, client: FlaskClient, submitted: str, message: str
+) -> None:
+    assert sign_in(client).status_code == 302
+    create_booking(client, "2026-09-10")
+
+    response = update_event_date(client, 1, submitted)
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert message in body
+    assert 'aria-invalid="true"' in body
+    assert f'value="{submitted}"' in body
+    assert ">2026-09-10</dd>" in body
+    with app.app_context():
+        booking = get_session().get(Booking, 1)
+        assert booking is not None
+        assert booking.event_date.isoformat() == "2026-09-10"
+
+
+def test_booking_update_rolls_back_when_event_date_commit_fails(
+    app, client: FlaskClient, clock
+) -> None:
+    assert sign_in(client).status_code == 302
+    create_booking(client, "2026-09-10")
+    with app.app_context():
+        original_updated_at = get_session().get(Booking, 1).updated_at
+    clock.advance(timedelta(minutes=1))
+
+    def fail_booking_commit(session: Session) -> None:
+        if any(isinstance(row, Booking) for row in session.dirty):
+            raise SQLAlchemyError("injected booking date update failure")
+
+    event.listen(Session, "before_commit", fail_booking_commit)
+    try:
+        response = update_event_date(client, 1, "2026-12-01")
+    finally:
+        event.remove(Session, "before_commit", fail_booking_commit)
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "The event date could not be saved. Try again." in body
+    assert 'value="2026-12-01"' in body
+    assert ">2026-09-10</dd>" in body
+    with app.app_context():
+        booking = get_session().get(Booking, 1)
+        assert booking is not None
+        assert booking.event_date.isoformat() == "2026-09-10"
+        assert booking.updated_at == original_updated_at
 
 
 def test_booking_delete_confirmation_shows_reference_date_and_selection_count(

@@ -739,7 +739,11 @@ def _render_booking_detail(
         preparation_items=preparation_items,
         selection_errors=selection_errors or {},
         selection_values=selection_values or {},
-        event_date_value=event_date_value or booking.event_date.isoformat(),
+        event_date_value=(
+            booking.event_date.isoformat()
+            if event_date_value is None
+            else event_date_value
+        ),
         event_date_errors=event_date_errors or {},
     )
 
