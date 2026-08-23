@@ -212,6 +212,55 @@ try {
     "Retry after a stale revision did not save the preserved draft",
   );
 
+  await evaluate(`(() => {
+    const originalFetch = window.fetch.bind(window);
+    let staleOnce = true;
+    window.fetch = async function (resource, init) {
+      const url = String(resource);
+      if (staleOnce && url.includes("/customer/selections/")) {
+        staleOnce = false;
+        const revision = Number(
+          document.querySelector("[data-basket-root]").dataset.revision,
+        );
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            code: "stale_revision",
+            message:
+              "This basket changed elsewhere. Current values were refreshed; review them and retry your change.",
+            revision,
+            selections: {
+              "${itemId}": {
+                quantity: 5,
+                stock_quantity: 5,
+                remaining_quantity: 0,
+                is_available: false,
+              },
+            },
+            totals: { item_types: 1, units: 5 },
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return originalFetch(resource, init);
+    };
+    const input = document.querySelector("#quantity-${itemId}");
+    input.value = "4";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  })()`);
+  await waitFor(
+    `(() => {
+      const card = document.querySelector('[data-item-id="${itemId}"]');
+      return card.dataset.isAvailable === "false"
+        && card.querySelector('[data-quantity-input]').disabled
+        && !card.querySelector('[data-unavailable-badge]').hidden
+        && card.querySelector('[data-retry]').hidden
+        && card.querySelector('[data-save-status]').textContent === "Quantity locked";
+    })()`,
+    "Stale revision that marked the item unavailable still showed Retry",
+  );
+
   await navigate(`${baseUrl}/customer/portal?view=basket`);
   const persisted = await evaluate(`(() => ({
     value: document.querySelector('#quantity-${itemId}')?.value,
@@ -224,6 +273,54 @@ try {
       persisted.types === "1" &&
       persisted.units === "5" &&
       persisted.currentView.trim() === "My basket",
+  );
+
+  await evaluate(`(() => {
+    const originalFetch = window.fetch.bind(window);
+    let failedOnce = true;
+    window.fetch = async function (resource, init) {
+      const url = String(resource);
+      if (failedOnce && url.includes("/customer/selections/")) {
+        failedOnce = false;
+        const revision = Number(
+          document.querySelector("[data-basket-root]").dataset.revision,
+        );
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            code: "save_failed",
+            message: "The change could not be saved. Retry.",
+            revision,
+            selections: {
+              "${itemId}": {
+                quantity: 5,
+                stock_quantity: 5,
+                remaining_quantity: 0,
+                is_available: false,
+              },
+            },
+            totals: { item_types: 1, units: 5 },
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return originalFetch(resource, init);
+    };
+    const input = document.querySelector("#quantity-${itemId}");
+    input.value = "4";
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  })()`);
+  await waitFor(
+    `(() => {
+      const card = document.querySelector('[data-item-id="${itemId}"]');
+      return card.dataset.isAvailable === "false"
+        && card.querySelector('[data-quantity-input]').disabled
+        && !card.querySelector('[data-unavailable-badge]').hidden
+        && card.querySelector('[data-retry]').hidden
+        && card.querySelector('[data-save-status]').textContent === "Quantity locked";
+    })()`,
+    "Retryable failure that marked the item unavailable still showed Retry",
   );
 
   const hidden = await evaluate(`(async () => {
@@ -351,6 +448,8 @@ try {
       rapid_quantity: 3,
       retry_visible: true,
       stale_draft_preserved: true,
+      stale_unavailable_hides_retry: true,
+      retryable_unavailable_hides_retry: true,
       hidden_locking: true,
       mobile,
       desktop,
@@ -359,7 +458,11 @@ try {
 } finally {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
   if (!chrome.killed) chrome.kill("SIGTERM");
-  await rm(profile, { recursive: true, force: true });
+  await Promise.race([
+    new Promise((resolve) => chrome.once("exit", resolve)),
+    delay(2_000),
+  ]);
+  await rm(profile, { recursive: true, force: true }).catch(() => {});
 }
 
 function assert(condition) {

@@ -188,6 +188,43 @@ def test_hidden_selection_is_basket_only_customer_locked_and_admin_editable(
         assert get_session().get(Booking, 1).event_date.isoformat() == "2026-09-01"
 
 
+def test_stale_revision_after_hide_and_admin_edit_marks_selection_unavailable(
+    app, client: FlaskClient
+) -> None:
+    assert sign_in(client).status_code == 302
+    assert (
+        submit_item(client, "/admin/items", name="Chair", quantity="5").status_code
+        == 302
+    )
+    code = create_booking(client, "2026-09-01")
+    customer = app.test_client()
+    assert customer_sign_in(customer, code).status_code == 302
+    assert customer_save(customer, 1, "3", revision=0).status_code == 200
+    stale_page = customer_basket_page(customer)
+
+    toggle_item_visibility(client, 1)
+    assert admin_save(client, 1, 1, "2").status_code == 302
+
+    stale = customer.post(
+        "/customer/selections/1",
+        data={
+            "csrf_token": csrf_token(stale_page),
+            "quantity": "4",
+            "revision": page_revision(stale_page),
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert stale.status_code == 409
+    payload = stale.get_json()
+    assert payload["code"] == "stale_revision"
+    assert payload["selections"]["1"]["quantity"] == 2
+    assert payload["selections"]["1"]["is_available"] is False
+    with app.app_context():
+        selection = get_session().get(BookingSelection, (1, 1))
+        assert selection is not None
+        assert selection.selected_quantity == 2
+
+
 def test_item_delete_lists_all_current_future_blockers_and_preserves_bookings(
     app, client: FlaskClient
 ) -> None:

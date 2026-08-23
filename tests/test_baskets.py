@@ -504,7 +504,7 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
             env={"CHROME_EXECUTABLE": chrome},
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=45,
             check=False,
         )
     finally:
@@ -518,6 +518,8 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
     assert result["rapid_quantity"] == 3
     assert result["retry_visible"] is True
     assert result["stale_draft_preserved"] is True
+    assert result["stale_unavailable_hides_retry"] is True
+    assert result["retryable_unavailable_hides_retry"] is True
     assert result["hidden_locking"] is True
     assert result["mobile"]["noOverflow"] is True
     assert result["desktop"]["noOverflow"] is True

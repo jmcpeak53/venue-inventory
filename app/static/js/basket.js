@@ -199,8 +199,7 @@
     const desired = state.pending ?? sentQuantity;
     state.pending = null;
     applySnapshot(payload, new Set([state.id, ...pendingIds()]));
-    state.lastAttempt = desired;
-    showError(state, payload.message, true);
+    offerRetry(state, desired, payload.message);
   }
 
   function handleStockChange(state, payload) {
@@ -222,12 +221,18 @@
     const desired = state.pending ?? sentQuantity;
     state.pending = null;
     if (payload) applySnapshot(payload, new Set([state.id, ...pendingIds()]));
-    state.lastAttempt = desired;
-    showError(
+    offerRetry(
       state,
+      desired,
       payload?.message || "The change could not be saved. Retry.",
-      true,
     );
+  }
+
+  function offerRetry(state, desired, message) {
+    // applySnapshot may have locked the item; retry is a silent no-op then.
+    if (!state.isAvailable) return;
+    state.lastAttempt = desired;
+    showError(state, message, true);
   }
 
   function retrySave(state) {
@@ -331,6 +336,6 @@
     state.status.setAttribute("role", "alert");
     state.status.setAttribute("aria-live", "assertive");
     state.status.textContent = message;
-    state.retry.hidden = !retryable;
+    state.retry.hidden = !(retryable && state.isAvailable);
   }
 })();
