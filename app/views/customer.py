@@ -8,17 +8,24 @@ from flask import (
     Blueprint,
     current_app,
     g,
+    jsonify,
     redirect,
     render_template,
     request,
     url_for,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.access_codes import access_code_digest, is_valid_access_code
+from app.baskets import (
+    basket_snapshot,
+    parse_selected_quantity,
+    replace_selection,
+    visible_basket_items,
+)
 from app.db import get_session
-from app.models import Booking, WebSession
+from app.models import Booking, InventoryItem, WebSession
 from app.security import (
     CUSTOMER_SESSION_SECONDS,
     SESSION_COOKIE_NAME,
@@ -34,6 +41,7 @@ logger = logging.getLogger("venue_inventory.customer")
 
 ACCESS_CODE_FAILED = "Access code not recognized."
 INVALID_LOOKUP_VALUE = "!" * 12
+MAX_REVISION = 9_223_372_036_854_775_807
 
 
 def customer_required(view):
@@ -48,7 +56,7 @@ def customer_required(view):
         booking = get_session().get(Booking, session.booking_id)
         if booking is None:
             return _redirect_to_login(clear_cookie=True)
-        return view(booking=booking, *args, **kwargs)
+        return view(*args, booking=booking, **kwargs)
 
     return wrapped
 
@@ -57,7 +65,125 @@ def customer_required(view):
 @bp.get("/portal")
 @customer_required
 def portal(*, booking: Booking):
-    return render_template("customer/portal.html", booking=booking)
+    query_text = request.args.get("q", "").strip()
+    view_mode = request.args.get("view", "all")
+    if view_mode not in {"all", "basket"}:
+        view_mode = "all"
+    db_session = get_session()
+    items = visible_basket_items(
+        db_session,
+        booking.id,
+        query_text=query_text,
+        basket_only=view_mode == "basket",
+    )
+    snapshot = basket_snapshot(db_session, booking.id)
+    response = current_app.make_response(
+        render_template(
+            "customer/portal.html",
+            booking=booking,
+            items=items,
+            query_text=query_text,
+            view_mode=view_mode,
+            totals=snapshot["totals"],
+        )
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.post("/selections/<int:item_id>")
+@customer_required
+def selection_update(item_id: int, *, booking: Booking):
+    quantity, quantity_error = parse_selected_quantity(
+        request.form.get("quantity", "")
+    )
+    expected_revision, revision_error = _parse_revision(
+        request.form.get("revision", "")
+    )
+    if quantity_error or revision_error:
+        return _selection_response(
+            booking.id,
+            status=400,
+            code="invalid_request",
+            message=quantity_error or revision_error or "The request is invalid.",
+        )
+    assert quantity is not None
+    assert expected_revision is not None
+
+    db_session = get_session()
+    now = naive_utc(current_app.extensions["clock"].now())
+    try:
+        revision_claim = db_session.execute(
+            update(Booking)
+            .where(
+                Booking.id == booking.id,
+                Booking.revision == expected_revision,
+            )
+            .values(
+                revision=Booking.revision + 1,
+                updated_at=now,
+            )
+        )
+        if revision_claim.rowcount != 1:
+            db_session.rollback()
+            return _selection_response(
+                booking.id,
+                status=409,
+                code="stale_revision",
+                message=(
+                    "This basket changed elsewhere. Current values were refreshed; "
+                    "review them and retry your change."
+                ),
+            )
+
+        item = db_session.execute(
+            select(InventoryItem).where(
+                InventoryItem.id == item_id,
+                InventoryItem.is_visible.is_(True),
+            )
+        ).scalar_one_or_none()
+        if item is None:
+            db_session.rollback()
+            return _selection_response(
+                booking.id,
+                status=404,
+                code="item_not_found",
+                message="This catalog item is no longer available.",
+            )
+        if quantity > item.stock_quantity:
+            db_session.rollback()
+            return _selection_response(
+                booking.id,
+                status=422,
+                code="quantity_out_of_range",
+                message=(
+                    f"Choose a quantity from 0 through {item.stock_quantity}; "
+                    "stock may have changed."
+                ),
+            )
+
+        replace_selection(
+            db_session,
+            booking_id=booking.id,
+            inventory_item_id=item.id,
+            quantity=quantity,
+            now=now,
+        )
+        db_session.commit()
+    except SQLAlchemyError:
+        db_session.rollback()
+        logger.exception(
+            "Customer basket change could not be committed.",
+            extra={"event": "customer_basket_save_failed"},
+        )
+        return _selection_response(
+            booking.id,
+            status=503,
+            code="save_failed",
+            message="The change could not be saved. Retry.",
+        )
+
+    return _selection_response(booking.id, status=200)
 
 
 @bp.get("/login")
@@ -181,3 +307,34 @@ def _client_ip() -> str:
 
 def _rate_limit_key() -> str:
     return f"customer-login:{_client_ip()}"
+
+
+def _parse_revision(raw_value: str) -> tuple[int | None, str | None]:
+    value = raw_value.strip()
+    if not value or not value.isascii() or not value.isdigit():
+        return None, "The basket revision is invalid. Refresh and try again."
+    if len(value) > len(str(MAX_REVISION)):
+        return None, "The basket revision is invalid. Refresh and try again."
+    revision = int(value)
+    if revision > MAX_REVISION:
+        return None, "The basket revision is invalid. Refresh and try again."
+    return revision, None
+
+
+def _selection_response(
+    booking_id: int,
+    *,
+    status: int,
+    code: str | None = None,
+    message: str | None = None,
+):
+    payload = basket_snapshot(get_session(), booking_id)
+    payload["ok"] = status == 200
+    if code is not None:
+        payload["code"] = code
+    if message is not None:
+        payload["message"] = message
+    response = jsonify(payload)
+    response.status_code = status
+    response.headers["Cache-Control"] = "no-store"
+    return response

@@ -3,9 +3,10 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
-from app.db import Base, configure_sqlite_connection
-from app.models import Booking, InventoryItem, WebSession
 from sqlalchemy import engine_from_config, event, pool
+
+from app.db import Base, configure_sqlite_connection
+from app.models import Booking, BookingSelection, InventoryItem, WebSession
 
 config = context.config
 
@@ -18,6 +19,7 @@ target_metadata = Base.metadata
 assert WebSession.__tablename__ == "web_sessions"
 assert InventoryItem.__tablename__ == "inventory_items"
 assert Booking.__tablename__ == "bookings"
+assert BookingSelection.__tablename__ == "booking_selections"
 
 
 def run_migrations_offline() -> None:

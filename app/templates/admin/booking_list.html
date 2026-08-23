@@ -20,7 +20,7 @@
               <h2><a href="{{ url_for('admin.booking_detail', booking_id=booking.id) }}">{{ booking.public_reference }}</a></h2>
               <p class="item-description">Event date: {{ booking.event_date }}</p>
             </div>
-            <p class="booking-created">Created {{ booking.created_at }} UTC</p>
+            <p class="booking-created">Last updated {{ booking.updated_at }} UTC</p>
           </article>
         {% endfor %}
       </div>

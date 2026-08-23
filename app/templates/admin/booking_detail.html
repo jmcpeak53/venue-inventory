@@ -3,15 +3,61 @@
 {% block title %}{{ booking.public_reference }} — Venue Inventory{% endblock %}
 
 {% block content %}
-  <section class="panel detail-panel">
+  <section class="panel booking-detail-panel">
     <p class="eyebrow">Administrator booking</p>
-    <h1>{{ booking.public_reference }}</h1>
-    <p class="muted">This anonymous booking has no basket selections yet.</p>
-    <dl class="item-details">
-      <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
-      <div><dt>Created</dt><dd>{{ booking.created_at }} UTC</dd></div>
-      <div><dt>Last updated</dt><dd>{{ booking.updated_at }} UTC</dd></div>
-    </dl>
+    <div class="page-heading">
+      <div>
+        <h1>{{ booking.public_reference }}</h1>
+        <p class="muted">Edit any visible catalog item. Administrator quantities may exceed stock.</p>
+      </div>
+      <dl class="booking-summary">
+        <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
+        <div><dt>Created</dt><dd>{{ booking.created_at }} UTC</dd></div>
+        <div><dt>Last updated</dt><dd>{{ booking.updated_at }} UTC</dd></div>
+      </dl>
+    </div>
+
+    {% if items %}
+      <div class="admin-selection-list">
+        {% for row in items %}
+          {% set selection_error = selection_errors.get(row.item.id) %}
+          <article class="admin-selection-row" id="selection-{{ row.item.id }}">
+            {% if row.item.image_filename %}
+              <img class="catalog-thumbnail" src="{{ url_for('pages.image', filename=row.item.image_filename) }}" alt="{{ row.item.name }}">
+            {% else %}
+              <div class="image-placeholder catalog-thumbnail" role="img" aria-label="No image available">No image</div>
+            {% endif %}
+            <div>
+              <h2>{{ row.item.name }}</h2>
+              <p class="item-quantity">{{ row.item.stock_quantity }} in stock</p>
+              {% if row.item.description %}<p class="item-description">{{ row.item.description }}</p>{% endif %}
+            </div>
+            <form class="admin-quantity-form" method="post" action="{{ url_for('admin.booking_selection_update', booking_id=booking.id, item_id=row.item.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="field compact-field">
+                <label for="admin-quantity-{{ row.item.id }}">Selected quantity<span class="visually-hidden"> for {{ row.item.name }}</span></label>
+                <input
+                  id="admin-quantity-{{ row.item.id }}"
+                  name="quantity"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="2147483647"
+                  step="1"
+                  value="{{ selection_values.get(row.item.id, row.selected_quantity) }}"
+                  {% if selection_error %}aria-invalid="true" aria-describedby="admin-quantity-error-{{ row.item.id }}"{% endif %}
+                >
+                {% if selection_error %}<p class="field-error" id="admin-quantity-error-{{ row.item.id }}" role="alert">{{ selection_error }}</p>{% endif %}
+              </div>
+              <button class="compact-button" type="submit">Update<span class="visually-hidden"> {{ row.item.name }}</span></button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">There are no visible catalog items to select.</p>
+    {% endif %}
+
     <div class="form-actions">
       <a class="text-action danger-text" href="{{ url_for('admin.booking_delete_confirm', booking_id=booking.id) }}">Delete booking</a>
       <a class="text-action" href="{{ url_for('admin.booking_list') }}">Back to bookings</a>

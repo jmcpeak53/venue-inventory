@@ -24,5 +24,6 @@ testpaths = ["tests"]
 addopts = ["-q", "--strict-markers"]
 filterwarnings = ["error"]
 markers = [
+    "browser: real-browser smoke tests (skipped when Chrome or Node is unavailable)",
     "container: tests that build and probe the Docker image",
 ]

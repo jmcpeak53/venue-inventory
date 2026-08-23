@@ -4,11 +4,12 @@ from pathlib import Path
 
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
+from sqlalchemy import create_engine, event, inspect, text
+
 from app.config import AppConfig
 from app.db import Base, configure_sqlite_connection, create_engine_for_app
 from app.migrate import head_revision, upgrade_to_head
-from app.models import Booking, WebSession
-from sqlalchemy import create_engine, event, inspect, text
+from app.models import Booking, BookingSelection, WebSession
 from tests.conftest import TEST_HASH
 
 
@@ -29,7 +30,7 @@ def test_upgrade_from_empty_database_reaches_head_and_matches_metadata(
     )
     revision = upgrade_to_head(config.database_url)
     assert revision == head_revision()
-    assert revision == "0003_bookings"
+    assert revision == "0004_booking_selections"
     assert config.database_path.is_file()
 
     engine = create_engine_for_app(config.database_url)
@@ -92,6 +93,49 @@ def test_upgrade_from_empty_database_reaches_head_and_matches_metadata(
             ).scalar_one()
         assert "BEFORE UPDATE OF public_reference" in trigger_sql
         assert Booking.__tablename__ == "bookings"
+        assert inspector.has_table("booking_selections")
+        selection_columns = {
+            column["name"]
+            for column in inspector.get_columns("booking_selections")
+        }
+        assert selection_columns == {
+            "booking_id",
+            "inventory_item_id",
+            "selected_quantity",
+            "created_at",
+            "updated_at",
+        }
+        selection_primary_key = inspector.get_pk_constraint(
+            "booking_selections"
+        )
+        assert selection_primary_key["constrained_columns"] == [
+            "booking_id",
+            "inventory_item_id",
+        ]
+        selection_foreign_keys = {
+            tuple(foreign_key["constrained_columns"]): foreign_key
+            for foreign_key in inspector.get_foreign_keys("booking_selections")
+        }
+        assert selection_foreign_keys[("booking_id",)]["referred_table"] == (
+            "bookings"
+        )
+        assert selection_foreign_keys[("booking_id",)]["options"]["ondelete"] == (
+            "CASCADE"
+        )
+        assert selection_foreign_keys[("inventory_item_id",)][
+            "referred_table"
+        ] == "inventory_items"
+        assert selection_foreign_keys[("inventory_item_id",)]["options"][
+            "ondelete"
+        ] == "CASCADE"
+        selection_checks = {
+            constraint["name"]
+            for constraint in inspector.get_check_constraints(
+                "booking_selections"
+            )
+        }
+        assert selection_checks == {"ck_booking_selections_quantity_positive"}
+        assert BookingSelection.__tablename__ == "booking_selections"
     finally:
         engine.dispose()
 
