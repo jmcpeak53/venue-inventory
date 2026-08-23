@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from werkzeug.serving import make_server
 
 from app.db import get_session
-from app.models import Booking, BookingSelection
+from app.models import Booking, BookingSelection, InventoryItem
 from tests.conftest import csrf_token, sign_in
 from tests.test_admin_catalog import submit_item
 from tests.test_bookings import create_booking, customer_sign_in
@@ -292,9 +292,31 @@ def test_admin_zero_removes_selection_and_invalid_value_does_not_touch_revision(
         assert get_session().get(Booking, 1).revision == 2
 
 
-@pytest.mark.parametrize("remove_via", ["hide", "delete"])
-def test_customer_save_after_item_removed_returns_not_found_without_bumping_revision(
-    app, client: FlaskClient, remove_via: str
+@pytest.mark.parametrize(
+    ("remove_via", "expected_status", "expected_code", "expected_message"),
+    [
+        (
+            "hide",
+            409,
+            "item_unavailable",
+            "This item is unavailable. Its saved quantity is locked until an "
+            "administrator shows it again.",
+        ),
+        (
+            "delete",
+            404,
+            "item_not_found",
+            "This catalog item is no longer available.",
+        ),
+    ],
+)
+def test_customer_save_after_item_hidden_or_deleted_does_not_bump_revision(
+    app,
+    client: FlaskClient,
+    remove_via: str,
+    expected_status: int,
+    expected_code: str,
+    expected_message: str,
 ) -> None:
     assert sign_in(client).status_code == 302
     assert submit_item(
@@ -331,11 +353,11 @@ def test_customer_save_after_item_removed_returns_not_found_without_bumping_revi
         },
         headers={"Accept": "application/json"},
     )
-    assert response.status_code == 404
+    assert response.status_code == expected_status
     payload = response.get_json()
     assert payload["ok"] is False
-    assert payload["code"] == "item_not_found"
-    assert payload["message"] == "This catalog item is no longer available."
+    assert payload["code"] == expected_code
+    assert payload["message"] == expected_message
     assert payload["revision"] == open_revision
     assert "1" not in payload["selections"]
     with app.app_context():
@@ -449,6 +471,14 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
             return response
         return None
 
+    @app.post("/_test/items/<int:item_id>/toggle-visibility")
+    def toggle_item_visibility_for_browser(item_id: int):
+        item = get_session().get(InventoryItem, item_id)
+        assert item is not None
+        item.is_visible = not item.is_visible
+        get_session().commit()
+        return jsonify({"is_visible": item.is_visible})
+
     assert sign_in(client).status_code == 302
     assert submit_item(
         client, "/admin/items", name="Chair", quantity="5"
@@ -474,7 +504,7 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
             env={"CHROME_EXECUTABLE": chrome},
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=45,
             check=False,
         )
     finally:
@@ -488,6 +518,9 @@ def test_real_browser_rapid_changes_retry_persistence_and_responsive_controls(
     assert result["rapid_quantity"] == 3
     assert result["retry_visible"] is True
     assert result["stale_draft_preserved"] is True
+    assert result["stale_unavailable_hides_retry"] is True
+    assert result["retryable_unavailable_hides_retry"] is True
+    assert result["hidden_locking"] is True
     assert result["mobile"]["noOverflow"] is True
     assert result["desktop"]["noOverflow"] is True
 

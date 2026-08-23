@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Booking, BookingSelection, InventoryItem
@@ -19,7 +19,11 @@ class BasketItem:
 
     @property
     def remaining_quantity(self) -> int:
-        return max(self.item.stock_quantity - self.selected_quantity, 0)
+        return self.item.stock_quantity - self.selected_quantity
+
+    @property
+    def has_negative_remaining(self) -> bool:
+        return self.remaining_quantity < 0
 
 
 def parse_selected_quantity(raw_value: str) -> tuple[int | None, str | None]:
@@ -36,22 +40,60 @@ def parse_selected_quantity(raw_value: str) -> tuple[int | None, str | None]:
     return quantity, None
 
 
-def visible_basket_items(
+def customer_basket_items(
     session: Session,
     booking_id: int,
     *,
     query_text: str = "",
     basket_only: bool = False,
 ) -> list[BasketItem]:
-    rows = session.execute(
-        select(InventoryItem, BookingSelection.selected_quantity)
-        .outerjoin(
-            BookingSelection,
-            (BookingSelection.inventory_item_id == InventoryItem.id)
-            & (BookingSelection.booking_id == booking_id),
+    return _basket_items(
+        session,
+        booking_id,
+        query_text=query_text,
+        basket_only=basket_only,
+        include_hidden_selected=basket_only,
+    )
+
+
+def admin_basket_items(session: Session, booking_id: int) -> list[BasketItem]:
+    """Return every visible item plus hidden selections for one booking."""
+
+    return _basket_items(
+        session,
+        booking_id,
+        include_hidden_selected=True,
+    )
+
+
+def _basket_items(
+    session: Session,
+    booking_id: int,
+    *,
+    query_text: str = "",
+    basket_only: bool = False,
+    include_hidden_selected: bool = False,
+) -> list[BasketItem]:
+    selection_quantity = BookingSelection.selected_quantity
+    statement = select(InventoryItem, selection_quantity).outerjoin(
+        BookingSelection,
+        (BookingSelection.inventory_item_id == InventoryItem.id)
+        & (BookingSelection.booking_id == booking_id),
+    )
+    if basket_only:
+        statement = statement.where(selection_quantity.is_not(None))
+    elif include_hidden_selected:
+        statement = statement.where(
+            or_(
+                InventoryItem.is_visible.is_(True),
+                selection_quantity.is_not(None),
+            )
         )
-        .where(InventoryItem.is_visible.is_(True))
-        .order_by(InventoryItem.name.asc(), InventoryItem.id.asc())
+    else:
+        statement = statement.where(InventoryItem.is_visible.is_(True))
+
+    rows = session.execute(
+        statement.order_by(InventoryItem.name.asc(), InventoryItem.id.asc())
     ).all()
     normalized_query = query_text.casefold()
     items: list[BasketItem] = []
@@ -71,12 +113,13 @@ def basket_snapshot(session: Session, booking_id: int) -> dict[str, object]:
     revision = session.execute(
         select(Booking.revision).where(Booking.id == booking_id)
     ).scalar_one()
-    items = visible_basket_items(session, booking_id)
+    items = _basket_items(session, booking_id, include_hidden_selected=True)
     selections = {
         str(row.item.id): {
             "quantity": row.selected_quantity,
             "stock_quantity": row.item.stock_quantity,
             "remaining_quantity": row.remaining_quantity,
+            "is_available": row.item.is_visible,
         }
         for row in items
     }

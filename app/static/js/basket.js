@@ -29,6 +29,7 @@
       queued: false,
       lastAttempt: null,
       serverValue: Number(card.dataset.selected || 0),
+      isAvailable: card.dataset.isAvailable !== "false",
     };
     cards.set(state.id, state);
 
@@ -49,6 +50,7 @@
   }
 
   function schedule(state, immediate = false) {
+    if (!state.isAvailable) return;
     window.clearTimeout(state.timer);
     const quantity = parsedQuantity(state.input);
     if (quantity === null) {
@@ -122,6 +124,15 @@
         payload?.code === "quantity_out_of_range"
       ) {
         handleStockChange(state, payload);
+      } else if (
+        response.status === 409 &&
+        payload?.code === "item_unavailable"
+      ) {
+        state.pending = null;
+        state.lastAttempt = null;
+        applySnapshot(payload);
+        setAvailability(state, false);
+        showError(state, payload.message);
       } else if (response.status === 404 && payload?.code === "item_not_found") {
         state.pending = null;
         applySnapshot(payload);
@@ -188,8 +199,7 @@
     const desired = state.pending ?? sentQuantity;
     state.pending = null;
     applySnapshot(payload, new Set([state.id, ...pendingIds()]));
-    state.lastAttempt = desired;
-    showError(state, payload.message, true);
+    offerRetry(state, desired, payload.message);
   }
 
   function handleStockChange(state, payload) {
@@ -211,16 +221,22 @@
     const desired = state.pending ?? sentQuantity;
     state.pending = null;
     if (payload) applySnapshot(payload, new Set([state.id, ...pendingIds()]));
-    state.lastAttempt = desired;
-    showError(
+    offerRetry(
       state,
+      desired,
       payload?.message || "The change could not be saved. Retry.",
-      true,
     );
   }
 
+  function offerRetry(state, desired, message) {
+    // applySnapshot may have locked the item; retry is a silent no-op then.
+    if (!state.isAvailable) return;
+    state.lastAttempt = desired;
+    showError(state, message, true);
+  }
+
   function retrySave(state) {
-    if (state.lastAttempt === null) return;
+    if (state.lastAttempt === null || !state.isAvailable) return;
     state.input.disabled = false;
     state.input.value = String(state.lastAttempt);
     state.input.removeAttribute("aria-invalid");
@@ -254,10 +270,49 @@
       state.input.max = String(selection.stock_quantity);
       const stockValue = state.card.querySelector("[data-stock-value]");
       const remaining = state.card.querySelector("[data-remaining]");
+      const remainingWarning = state.card.querySelector(
+        "[data-remaining-warning]",
+      );
       if (stockValue) stockValue.textContent = String(selection.stock_quantity);
-      if (remaining) remaining.textContent = String(selection.remaining_quantity);
+      if (remaining) {
+        remaining.textContent = String(selection.remaining_quantity);
+        remaining.classList.toggle(
+          "negative-remaining-value",
+          Number(selection.remaining_quantity) < 0,
+        );
+      }
+      if (remainingWarning) {
+        remainingWarning.hidden = Number(selection.remaining_quantity) >= 0;
+      }
+      if (typeof selection.is_available === "boolean") {
+        setAvailability(state, selection.is_available);
+      }
       if (!preserve.has(id)) state.input.value = String(selection.quantity);
     });
+  }
+
+  function setAvailability(state, isAvailable) {
+    const wasAvailable = state.isAvailable;
+    state.isAvailable = isAvailable;
+    state.card.dataset.isAvailable = isAvailable ? "true" : "false";
+    state.input.disabled = !isAvailable;
+    const badge = state.card.querySelector("[data-unavailable-badge]");
+    const message = state.card.querySelector("[data-unavailable-message]");
+    if (badge) badge.hidden = isAvailable;
+    if (message) message.hidden = isAvailable;
+
+    if (!isAvailable) {
+      window.clearTimeout(state.timer);
+      state.pending = null;
+      state.lastAttempt = null;
+      state.retry.hidden = true;
+      state.status.className = "save-status";
+      state.status.setAttribute("role", "status");
+      state.status.setAttribute("aria-live", "polite");
+      state.status.textContent = "Quantity locked";
+    } else if (!wasAvailable) {
+      showSaved(state);
+    }
   }
 
   function showSaving(state) {
@@ -281,6 +336,6 @@
     state.status.setAttribute("role", "alert");
     state.status.setAttribute("aria-live", "assertive");
     state.status.textContent = message;
-    state.retry.hidden = !retryable;
+    state.retry.hidden = !(retryable && state.isAvailable);
   }
 })();

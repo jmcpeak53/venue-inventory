@@ -15,7 +15,7 @@ from flask import (
     request,
     url_for,
 )
-from sqlalchemy import String, delete, or_, select, update
+from sqlalchemy import String, delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.access_codes import (
@@ -24,9 +24,9 @@ from app.access_codes import (
     generate_access_code,
 )
 from app.baskets import (
+    admin_basket_items,
     parse_selected_quantity,
     replace_selection,
-    visible_basket_items,
 )
 from app.db import get_session
 from app.images import (
@@ -35,7 +35,7 @@ from app.images import (
     normalize_upload,
     remove_normalized_image,
 )
-from app.models import Booking, InventoryItem, WebSession
+from app.models import Booking, BookingSelection, InventoryItem, WebSession
 from app.passwords import verify_admin_password
 from app.security import (
     ADMIN_SESSION_SECONDS,
@@ -44,7 +44,7 @@ from app.security import (
     new_session_token,
     set_session_cookie,
 )
-from app.times import naive_utc
+from app.times import chicago_date, naive_utc
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger("venue_inventory.admin")
@@ -134,15 +134,32 @@ def dashboard():
 @bp.get("/bookings")
 @admin_required
 def booking_list():
+    db_session = get_session()
     bookings = (
-        get_session()
+        db_session
         .execute(
             select(Booking).order_by(Booking.created_at.desc(), Booking.id.desc())
         )
         .scalars()
         .all()
     )
-    return render_template("admin/booking_list.html", bookings=bookings)
+    negative_remaining_booking_ids = set(
+        db_session.execute(
+            select(BookingSelection.booking_id)
+            .join(
+                InventoryItem,
+                InventoryItem.id == BookingSelection.inventory_item_id,
+            )
+            .where(
+                BookingSelection.selected_quantity > InventoryItem.stock_quantity
+            )
+        ).scalars()
+    )
+    return render_template(
+        "admin/booking_list.html",
+        bookings=bookings,
+        negative_remaining_booking_ids=negative_remaining_booking_ids,
+    )
 
 
 @bp.get("/bookings/new")
@@ -234,10 +251,7 @@ def booking_selection_update(booking_id: int, item_id: int):
     booking = _booking_or_404(booking_id)
     db_session = get_session()
     item = db_session.execute(
-        select(InventoryItem).where(
-            InventoryItem.id == item_id,
-            InventoryItem.is_visible.is_(True),
-        )
+        select(InventoryItem).where(InventoryItem.id == item_id)
     ).scalar_one_or_none()
     if item is None:
         abort(404)
@@ -482,24 +496,71 @@ def item_toggle_visibility(item_id: int):
 @bp.get("/items/<int:item_id>/delete")
 @admin_required
 def item_delete_confirm(item_id: int):
-    return render_template("admin/item_delete.html", item=_item_or_404(item_id))
+    item = _item_or_404(item_id)
+    return _render_item_delete(
+        item,
+        blocking_bookings=_item_deletion_blockers(item.id),
+    )
 
 
 @bp.post("/items/<int:item_id>/delete")
 @admin_required
 def item_delete(item_id: int):
     item = _item_or_404(item_id)
-    image_filename = item.image_filename
     db_session = get_session()
-    db_session.delete(item)
+    today = chicago_date(current_app.extensions["clock"].now())
+    blocking_bookings = _item_deletion_blockers(item.id, today)
+    if blocking_bookings:
+        return _item_delete_blocked_response(item, blocking_bookings)
+
+    image_filename = item.image_filename
+    # End the read snapshot so the write transaction can see a selection
+    # committed after that first guard read.
+    db_session.rollback()
+    item = db_session.get(InventoryItem, item.id)
+    if item is None:
+        abort(404)
     try:
+        # Past-only rows are removed under this write transaction. The item
+        # is deleted only if no current/future selection exists at statement
+        # time, so a later selection cannot be dropped with the item.
+        db_session.execute(
+            delete(BookingSelection).where(
+                BookingSelection.inventory_item_id == item.id,
+                BookingSelection.booking_id.in_(
+                    select(Booking.id).where(Booking.event_date < today)
+                ),
+            )
+        )
+        blocking_bookings = _item_deletion_blockers(item.id, today)
+        if blocking_bookings:
+            return _item_delete_blocked_response(item, blocking_bookings)
+        deleted = db_session.execute(
+            delete(InventoryItem).where(
+                InventoryItem.id == item.id,
+                ~_blocking_selection_exists(item.id, today),
+            )
+        )
+        if deleted.rowcount != 1:
+            blocking_bookings = _item_deletion_blockers(item.id, today)
+            if blocking_bookings:
+                return _item_delete_blocked_response(item, blocking_bookings)
+            if db_session.get(InventoryItem, item.id) is None:
+                db_session.rollback()
+                abort(404)
+            db_session.rollback()
+            return _render_item_delete(
+                item=item,
+                blocking_bookings=[],
+                error="The item could not be deleted. Try again.",
+            )
         db_session.commit()
     except SQLAlchemyError:
         db_session.rollback()
         logger.exception("Deleting inventory item %s could not be committed.", item_id)
-        return render_template(
-            "admin/item_delete.html",
+        return _render_item_delete(
             item=item,
+            blocking_bookings=[],
             error="The item could not be deleted. Try again.",
         )
 
@@ -569,9 +630,76 @@ def _render_booking_detail(
     return render_template(
         "admin/booking_detail.html",
         booking=booking,
-        items=visible_basket_items(get_session(), booking.id),
+        items=admin_basket_items(get_session(), booking.id),
         selection_errors=selection_errors or {},
         selection_values=selection_values or {},
+    )
+
+
+def _blocking_selection_exists(item_id: int, today: date):
+    return exists(
+        select(Booking.id)
+        .join(
+            BookingSelection,
+            BookingSelection.booking_id == Booking.id,
+        )
+        .where(
+            BookingSelection.inventory_item_id == item_id,
+            Booking.event_date >= today,
+        )
+    )
+
+
+def _item_deletion_blockers(item_id: int, today: date | None = None) -> list[Booking]:
+    if today is None:
+        today = chicago_date(current_app.extensions["clock"].now())
+    return (
+        get_session()
+        .execute(
+            select(Booking)
+            .join(
+                BookingSelection,
+                BookingSelection.booking_id == Booking.id,
+            )
+            .where(
+                BookingSelection.inventory_item_id == item_id,
+                Booking.event_date >= today,
+            )
+            .order_by(Booking.event_date.asc(), Booking.public_reference.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _item_delete_blocked_response(item: InventoryItem, blocking_bookings: list[Booking]):
+    # Drop any uncommitted past-selection DELETE before rendering so a later
+    # commit or lazy-load cannot persist a partial write.
+    get_session().rollback()
+    return (
+        _render_item_delete(
+            item,
+            blocking_bookings=blocking_bookings,
+            error=(
+                "This item cannot be deleted because it is selected by a "
+                "current or future booking. Hide it instead."
+            ),
+        ),
+        409,
+    )
+
+
+def _render_item_delete(
+    item: InventoryItem,
+    *,
+    blocking_bookings: list[Booking],
+    error: str | None = None,
+):
+    return render_template(
+        "admin/item_delete.html",
+        item=item,
+        blocking_bookings=blocking_bookings,
+        error=error,
     )
 
 
@@ -689,8 +817,25 @@ def _save_submitted_image() -> tuple[str | None, str | None]:
 def _remove_image_file(filename: str | None) -> None:
     if filename is None:
         return
-    if not remove_normalized_image(current_app.config["APP_CONFIG"].data_dir, filename):
+    try:
+        removed = remove_normalized_image(
+            current_app.config["APP_CONFIG"].data_dir, filename
+        )
+    except Exception:
         logger.warning(
             "Could not remove normalized inventory image file.",
-            extra={"event": "inventory_image_cleanup_failed", "filename": filename},
+            exc_info=True,
+            extra={
+                "event": "inventory_image_cleanup_failed",
+                "image_filename": filename,
+            },
+        )
+        return
+    if not removed:
+        logger.warning(
+            "Could not remove normalized inventory image file.",
+            extra={
+                "event": "inventory_image_cleanup_failed",
+                "image_filename": filename,
+            },
         )

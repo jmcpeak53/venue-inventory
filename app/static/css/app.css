@@ -353,6 +353,31 @@ h2 {
   color: var(--danger);
 }
 
+.inline-warning {
+  margin: 0.55rem 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.negative-remaining-value {
+  color: var(--danger) !important;
+}
+
+.warning-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding-left: 1.5rem;
+  color: var(--danger);
+}
+
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .checkbox-field {
   padding: 0;
   border: 0;

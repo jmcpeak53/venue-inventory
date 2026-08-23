@@ -13,7 +13,13 @@ customer can search visible items, switch between the full catalog and their
 basket, and change quantities with automatic save and retry feedback. Each
 booking may independently select up to the full stock shown in the catalog.
 Administrators can inspect the same basket and set any nonnegative quantity,
-including a value above current stock. HTTPS comes in a later slice.
+including a value above current stock. Later stock reductions preserve saved
+selections and show per-booking negative-remaining warnings. Hidden items leave
+general customer browsing, while a hidden item already selected by a booking
+stays locked and labeled unavailable in that booking's basket. Item deletion is
+blocked by current or future selecting bookings using the Chicago calendar;
+past-only selection rows are removed with the item while their bookings remain.
+HTTPS comes in a later slice.
 
 ## Setup
 
@@ -113,10 +119,20 @@ Open `http://localhost:8080/`.
    checkout action is required. Refresh the page to confirm the basket remains.
 7. In the administrator window, open **Bookings**, choose the booking, and
    update the same item. Administrator quantities may be above current stock;
-   the booking's last-updated time changes with either party's edit.
+   the booking's last-updated time changes with either party's edit. Lower the
+   item's catalog stock below the saved quantity to see the negative-remaining
+   warning without changing the selection.
 8. Confirm the item appears in administrator catalog search, and use its
-   detail page to edit, hide, or delete it.
-9. Choose **Sign out** and confirm the dashboard redirects back to sign-in.
+   detail page to hide it. It disappears from **All items** for the customer,
+   remains locked and marked unavailable in **My basket**, and stays editable
+   on the administrator booking detail. Showing it again unlocks customer
+   changes.
+9. Open the item's delete confirmation. Deletion is blocked when a selecting
+   booking is dated today or later in `America/Chicago`; the page lists only
+   its non-secret booking reference and event date and recommends hiding.
+   Items with no selections or past-only selections can be permanently
+   deleted without deleting the bookings.
+10. Choose **Sign out** and confirm the dashboard redirects back to sign-in.
 
 Health URLs:
 
@@ -139,9 +155,9 @@ verification image. Local `docker compose up` and VPS deploys use the
 `web` service, which is the production runtime image.
 
 The suite also contains a real-browser smoke test for rapid autosave ordering,
-retry feedback, refresh persistence, and mobile/desktop layout. It skips when
-its host cannot provide Chrome, Node, or a localhost test socket. To run it on
-a developer machine:
+retry feedback, negative snapshot rendering, refresh persistence, and
+mobile/desktop layout. It skips when its host cannot provide Chrome, Node, or a
+localhost test socket. To run it on a developer machine:
 
 1. Install Python 3.12, Node 22 or newer, and Google Chrome or Chromium.
 2. From this repository folder, create the test environment:
