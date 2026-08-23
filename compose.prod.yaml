@@ -1,0 +1,25 @@
+# VPS-only overlay. Local `docker compose up` must not use this file: it
+# joins Caddy's existing Docker network and mounts the production secret
+# files that live outside the Git checkout.
+services:
+  web:
+    container_name: venue-inventory
+    env_file:
+      - ${VENUE_INVENTORY_SECRETS_FILE:-/etc/venue-inventory/prod.env}
+    environment:
+      VENUE_INVENTORY_SESSION_COOKIE_SECURE: "true"
+      VENUE_INVENTORY_TRUST_PROXY: "true"
+      VENUE_INVENTORY_REQUIRE_DATA_MOUNT: "true"
+      VENUE_INVENTORY_ADMIN_PASSWORD_HASH_FILE: /run/secrets/admin-password.hash
+    volumes:
+      - ${VENUE_INVENTORY_ADMIN_HASH_FILE:-/etc/venue-inventory/admin-password.hash}:/run/secrets/admin-password.hash:ro
+    networks:
+      default: {}
+      ingress:
+        aliases:
+          - venue-inventory
+
+networks:
+  ingress:
+    name: ${VENUE_INVENTORY_CADDY_NETWORK:-needle-minder_default}
+    external: true

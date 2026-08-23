@@ -39,9 +39,13 @@ RUN pip install -r /app/requirements-dev.lock
 COPY tests /app/tests
 COPY scripts /app/scripts
 COPY systemd /app/systemd
-COPY compose.yaml /app/compose.yaml
+COPY compose.yaml compose.prod.yaml /app/
 RUN chmod 755 /app/scripts/verify.sh /app/scripts/entrypoint.sh \
     && chmod 755 /app/scripts/run-backup-vps.sh /app/scripts/restore-vps.sh \
         /app/scripts/restore-drill-vps.sh /app/scripts/install-backup-timer-vps.sh \
-    && chmod -R a+rX /app/tests /app/scripts /app/pyproject.toml /app/systemd /app/compose.yaml
+        /app/scripts/deploy-vps.sh /app/scripts/deploy-remote.sh \
+        /app/scripts/bootstrap-prod-secrets.sh /app/scripts/ensure-caddy-inventory.sh \
+        /app/scripts/rollback-drill-vps.sh \
+    && chmod -R a+rX /app/tests /app/scripts /app/pyproject.toml /app/systemd \
+        /app/compose.yaml /app/compose.prod.yaml /app/scripts/deploy_lib.py
 USER app
