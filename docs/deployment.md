@@ -80,3 +80,8 @@ ssh prod-vps-01 'ufw allow 8080/tcp comment "Venue Inventory prototype"'
 ```
 
 This is a one-time step. It should not be included in routine deployments.
+
+Before the first deployment, set `VENUE_INVENTORY_ACCESS_CODE_HMAC_SECRET`
+in the VPS `.env` file to a private random value of at least 32 characters.
+Keep it stable across deployments so existing customer access codes continue
+to work; do not use the development value from `.env.example` on the VPS.

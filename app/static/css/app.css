@@ -166,6 +166,7 @@ input[type="password"] {
 
 input[type="text"],
 input[type="search"],
+input[type="date"],
 input[type="file"],
 textarea,
 select {
@@ -451,6 +452,54 @@ h2 {
   white-space: pre-line;
 }
 
+.booking-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.booking-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgb(17 26 23 / 46%);
+}
+
+.booking-created {
+  margin: 0;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.access-code-panel {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid rgb(117 211 178 / 38%);
+  border-radius: 1rem;
+  background: rgb(117 211 178 / 8%);
+}
+
+.field-label {
+  margin: 0;
+  color: #eef6f1;
+  font-weight: 700;
+}
+
+.access-code {
+  max-width: none;
+  margin: 0.6rem 0 0;
+  color: #eef6f1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(1.5rem, 7vw, 2.3rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -497,5 +546,14 @@ h2 {
 
   .catalog-row > .text-action {
     grid-column: 2;
+  }
+
+  .booking-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .booking-created {
+    text-align: left;
   }
 }

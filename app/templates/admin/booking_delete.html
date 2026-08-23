@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ booking.public_reference }} — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel form-panel">
+    <p class="eyebrow">Permanent action</p>
+    <h1>Delete booking?</h1>
+    <p>This permanently deletes <strong>{{ booking.public_reference }}</strong>, signs out its booking party, and makes its access code unusable.</p>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('admin.booking_delete', booking_id=booking.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-actions">
+        <button class="danger-button" type="submit">Permanently delete</button>
+        <a class="text-action" href="{{ url_for('admin.booking_detail', booking_id=booking.id) }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ booking.public_reference }} — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel detail-panel">
+    <p class="eyebrow">Administrator booking</p>
+    <h1>{{ booking.public_reference }}</h1>
+    <p class="muted">This anonymous booking has no basket selections yet.</p>
+    <dl class="item-details">
+      <div><dt>Event date</dt><dd>{{ booking.event_date }}</dd></div>
+      <div><dt>Created</dt><dd>{{ booking.created_at }} UTC</dd></div>
+      <div><dt>Last updated</dt><dd>{{ booking.updated_at }} UTC</dd></div>
+    </dl>
+    <div class="form-actions">
+      <a class="text-action danger-text" href="{{ url_for('admin.booking_delete_confirm', booking_id=booking.id) }}">Delete booking</a>
+      <a class="text-action" href="{{ url_for('admin.booking_list') }}">Back to bookings</a>
+    </div>
+  </section>
+{% endblock %}

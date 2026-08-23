@@ -41,6 +41,7 @@ def data_dir(tmp_path: Path) -> Path:
 def app_config(data_dir: Path) -> AppConfig:
     return AppConfig(
         secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
         admin_password_hash=TEST_HASH,
         data_dir=data_dir,
         session_cookie_secure=False,

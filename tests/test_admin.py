@@ -9,7 +9,7 @@ from app.db import get_session
 from app.migrate import upgrade_to_head
 from app.models import WebSession
 from app.rate_limit import MAX_FAILED_ATTEMPTS, MemoryRateLimitStore
-from app.security import SESSION_COOKIE_NAME
+from app.security import ADMIN_SESSION_SECONDS, SESSION_COOKIE_NAME
 from flask.testing import FlaskClient
 from sqlalchemy import select
 from tests.conftest import TEST_HASH, TEST_PASSWORD, csrf_token, read_csrf, sign_in
@@ -137,6 +137,30 @@ def test_logout_without_csrf_is_rejected(app, client: FlaskClient) -> None:
         assert len(rows) == 1
 
 
+def test_admin_csrf_validation_uses_the_admin_session_lifetime(
+    client: FlaskClient, monkeypatch
+) -> None:
+    seen_max_ages: list[int] = []
+
+    def accept_csrf_token(
+        _secret_key: str,
+        _token: str,
+        _session_digest: str,
+        *,
+        max_age: int,
+    ) -> bool:
+        seen_max_ages.append(max_age)
+        return True
+
+    monkeypatch.setattr("app.csrf_token_is_valid", accept_csrf_token)
+    assert sign_in(client).status_code == 302
+    assert (
+        client.post("/admin/logout", data={"csrf_token": "accepted"}).status_code
+        == 302
+    )
+    assert seen_max_ages[-1] == ADMIN_SESSION_SECONDS
+
+
 def test_login_without_csrf_is_rejected(client: FlaskClient) -> None:
     response = client.post("/admin/login", data={"password": TEST_PASSWORD})
     assert response.status_code == 403
@@ -225,6 +249,7 @@ def test_trusted_proxy_rate_limits_by_forwarded_client_ip(
 ) -> None:
     config = AppConfig(
         secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
         admin_password_hash=TEST_HASH,
         data_dir=data_dir,
         session_cookie_secure=False,
@@ -261,6 +286,7 @@ def test_secure_cookie_flag_is_emitted_when_configured(
 ) -> None:
     config = AppConfig(
         secret_key="local-test-secret-key-32-bytes-min",
+        access_code_hmac_secret="local-test-access-code-hmac-secret-32",
         admin_password_hash=TEST_HASH,
         data_dir=data_dir,
         session_cookie_secure=True,

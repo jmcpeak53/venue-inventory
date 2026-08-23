@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -23,15 +25,45 @@ class WebSession(Base):
             "actor_type IN ('admin', 'booking')",
             name="ck_web_sessions_actor_type",
         ),
+        CheckConstraint(
+            "(actor_type = 'admin' AND booking_id IS NULL) OR "
+            "(actor_type = 'booking' AND booking_id IS NOT NULL)",
+            name="ck_web_sessions_booking_actor_consistency",
+        ),
         UniqueConstraint("session_digest", name="uq_web_sessions_session_digest"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     actor_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    booking_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
+class Booking(Base):
+    __tablename__ = "bookings"
+    __table_args__ = (
+        CheckConstraint("revision >= 0", name="ck_bookings_revision_nonnegative"),
+        CheckConstraint(
+            "length(access_code_digest) = 64",
+            name="ck_bookings_access_code_digest_length",
+        ),
+        UniqueConstraint("public_reference", name="uq_bookings_public_reference"),
+        UniqueConstraint("access_code_digest", name="uq_bookings_access_code_digest"),
+        {"sqlite_autoincrement": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_reference: Mapped[str] = mapped_column(String(32), nullable=False)
+    access_code_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class InventoryItem(Base):

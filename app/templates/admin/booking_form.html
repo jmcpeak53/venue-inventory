@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Create booking — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel form-panel">
+    <p class="eyebrow">Administrator bookings</p>
+    <h1>Create booking</h1>
+    <p>Only the event date is stored. A customer access code will be shown once after creation.</p>
+
+    {% if errors.get('form') %}<div class="alert" role="alert">{{ errors['form'] }}</div>{% endif %}
+
+    <form method="post" action="{{ url_for('admin.booking_create') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="event_date">Event date</label>
+        <input id="event_date" name="event_date" type="date" required value="{{ values['event_date'] }}" {% if errors.get('event_date') %}aria-invalid="true" aria-describedby="event-date-error"{% endif %}>
+        {% if errors.get('event_date') %}<p class="field-error" id="event-date-error">{{ errors['event_date'] }}</p>{% endif %}
+      </div>
+      <div class="form-actions">
+        <button type="submit">Create booking</button>
+        <a class="text-action" href="{{ url_for('admin.booking_list') }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

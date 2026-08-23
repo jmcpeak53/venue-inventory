@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from functools import wraps
 
 from flask import (
@@ -15,9 +15,14 @@ from flask import (
     request,
     url_for,
 )
-from sqlalchemy import String, or_, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import String, delete, or_, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from app.access_codes import (
+    access_code_digest,
+    format_access_code,
+    generate_access_code,
+)
 from app.db import get_session
 from app.images import (
     ImageValidationError,
@@ -25,7 +30,7 @@ from app.images import (
     normalize_upload,
     remove_normalized_image,
 )
-from app.models import InventoryItem, WebSession
+from app.models import Booking, InventoryItem, WebSession
 from app.passwords import verify_admin_password
 from app.security import (
     ADMIN_SESSION_SECONDS,
@@ -45,6 +50,7 @@ MAX_ITEM_DESCRIPTION_LENGTH = 2_000
 MAX_STOCK_QUANTITY = 2_147_483_647
 MAX_STOCK_QUANTITY_DIGITS = len(str(MAX_STOCK_QUANTITY))
 QUANTITY_RE = re.compile(r"[0-9]+")
+MAX_BOOKING_CODE_RETRIES = 10
 
 
 def admin_required(view):
@@ -118,6 +124,137 @@ def login_submit():
 @admin_required
 def dashboard():
     return render_template("admin/dashboard.html")
+
+
+@bp.get("/bookings")
+@admin_required
+def booking_list():
+    bookings = (
+        get_session()
+        .execute(
+            select(Booking).order_by(Booking.created_at.desc(), Booking.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return render_template("admin/booking_list.html", bookings=bookings)
+
+
+@bp.get("/bookings/new")
+@admin_required
+def booking_new():
+    return _render_booking_form(values=_new_booking_values())
+
+
+@bp.post("/bookings")
+@admin_required
+def booking_create():
+    values, errors = _booking_values_from_request()
+    if errors:
+        return _render_booking_form(values=values, errors=errors)
+
+    config = current_app.config["APP_CONFIG"]
+    now = naive_utc(current_app.extensions["clock"].now())
+    db_session = get_session()
+    generated_code = ""
+    booking = None
+    for _attempt in range(MAX_BOOKING_CODE_RETRIES):
+        generated_code = generate_access_code()
+        booking = Booking(
+            public_reference="",
+            access_code_digest=access_code_digest(
+                generated_code, config.access_code_hmac_secret
+            ),
+            event_date=values["event_date"],
+            revision=0,
+            created_at=now,
+            updated_at=now,
+        )
+        db_session.add(booking)
+        try:
+            # The database assigns the durable numeric portion while the row
+            # remains invisible inside this uncommitted transaction.
+            db_session.flush()
+            booking.public_reference = f"B-{booking.id:04d}"
+            db_session.flush()
+            db_session.commit()
+            break
+        except IntegrityError:
+            # A digest collision is exceptionally unlikely, but retrying is
+            # required so uniqueness never turns code creation into a leak.
+            db_session.rollback()
+            booking = None
+        except SQLAlchemyError:
+            db_session.rollback()
+            logger.exception("Booking creation could not be committed.")
+            return _render_booking_form(
+                values=values,
+                errors={"form": "The booking could not be created. Try again."},
+            )
+    else:
+        logger.error(
+            "Booking creation exhausted access-code uniqueness retries.",
+            extra={"event": "booking_create_code_collision"},
+        )
+        return _render_booking_form(
+            values=values,
+            errors={"form": "The booking could not be created. Try again."},
+        )
+
+    if booking is None:
+        return _render_booking_form(
+            values=values,
+            errors={"form": "The booking could not be created. Try again."},
+        )
+    response = current_app.make_response(
+        render_template(
+            "admin/booking_created.html",
+            booking=booking,
+            access_code=format_access_code(generated_code),
+        )
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.get("/bookings/<int:booking_id>")
+@admin_required
+def booking_detail(booking_id: int):
+    return render_template(
+        "admin/booking_detail.html", booking=_booking_or_404(booking_id)
+    )
+
+
+@bp.get("/bookings/<int:booking_id>/delete")
+@admin_required
+def booking_delete_confirm(booking_id: int):
+    return render_template(
+        "admin/booking_delete.html", booking=_booking_or_404(booking_id)
+    )
+
+
+@bp.post("/bookings/<int:booking_id>/delete")
+@admin_required
+def booking_delete(booking_id: int):
+    booking = _booking_or_404(booking_id)
+    db_session = get_session()
+    # Both statements commit or roll back together. The foreign-key cascade
+    # is a second database-level guarantee for session invalidation.
+    db_session.execute(delete(WebSession).where(WebSession.booking_id == booking.id))
+    db_session.delete(booking)
+    try:
+        db_session.commit()
+    except SQLAlchemyError:
+        db_session.rollback()
+        logger.exception(
+            "Deleting booking %s could not be committed.", booking.public_reference
+        )
+        return render_template(
+            "admin/booking_delete.html",
+            booking=booking,
+            error="The booking could not be deleted. Try again.",
+        )
+    return redirect(url_for("admin.booking_list"))
 
 
 @bp.get("/items")
@@ -341,6 +478,39 @@ def _item_or_404(item_id: int) -> InventoryItem:
     if item is None:
         abort(404)
     return item
+
+
+def _booking_or_404(booking_id: int) -> Booking:
+    booking = get_session().get(Booking, booking_id)
+    if booking is None:
+        abort(404)
+    return booking
+
+
+def _render_booking_form(
+    *, values: dict[str, object], errors: dict[str, str] | None = None
+):
+    return render_template(
+        "admin/booking_form.html", values=values, errors=errors or {}
+    )
+
+
+def _new_booking_values() -> dict[str, object]:
+    return {"event_date": ""}
+
+
+def _booking_values_from_request() -> tuple[dict[str, object], dict[str, str]]:
+    event_date_raw = request.form.get("event_date", "").strip()
+    values: dict[str, object] = {"event_date": event_date_raw}
+    errors: dict[str, str] = {}
+    if not event_date_raw:
+        errors["event_date"] = "Enter an event date."
+    else:
+        try:
+            values["event_date"] = date.fromisoformat(event_date_raw)
+        except ValueError:
+            errors["event_date"] = "Enter a valid event date."
+    return values, errors
 
 
 def _render_item_form(

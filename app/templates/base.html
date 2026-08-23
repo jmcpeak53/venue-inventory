@@ -14,7 +14,16 @@
       {% if admin_authenticated %}
         <nav class="header-actions" aria-label="Administrator">
           <a href="{{ url_for('admin.item_list') }}">Catalog</a>
+          <a href="{{ url_for('admin.booking_list') }}">Bookings</a>
           <form method="post" action="{{ url_for('admin.logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Sign out</button>
+          </form>
+        </nav>
+      {% elif customer_authenticated %}
+        <nav class="header-actions" aria-label="Booking party">
+          <a href="{{ url_for('customer.portal') }}">Portal</a>
+          <form method="post" action="{{ url_for('customer.logout') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit">Sign out</button>
           </form>

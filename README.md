@@ -1,15 +1,17 @@
 # Venue Inventory
 
 A self-hosted web app for managing venue inventory. This slice is a Flask
-application with SQLite persistence, a protected administrator catalog, and
-container health checks.
+application with SQLite persistence, a protected administrator catalog and
+anonymous booking list, customer access-code login, and container health
+checks.
 
 ## Status
 
 The static hello-world prototype has been replaced by a Flask/Gunicorn
 container. You can start it, sign in with the shared administrator password,
-create and search catalog items, add optional normalized images, sign out, and
-confirm that readiness is healthy. Bookings and HTTPS come in later slices.
+create anonymous bookings and one-time customer codes, sign in to the empty
+customer portal, manage catalog items, sign out, and confirm that readiness is
+healthy. Basket selections and HTTPS come in later slices.
 
 ## Setup
 
@@ -19,12 +21,15 @@ The repository includes local development defaults so the container can start
 without extra files:
 
 - Administrator password: `local-admin-password`
+- Access-code HMAC secret: a local development default is supplied
 - Session cookies are not marked `Secure` (this machine is serving HTTP)
 - SQLite, session rows, and normalized catalog images are stored in the
   `venue-inventory-data` Docker volume
 
 Those defaults are only for local use. Before any shared installation, copy
-`.env.example` to `.env` and replace the secret key and password hash.
+`.env.example` to `.env` and replace the Flask secret key, access-code HMAC
+secret, and password hash. Keep the HMAC secret stable between deployments;
+changing it makes every existing customer code unusable.
 
 To create a new administrator password hash:
 
@@ -60,7 +65,15 @@ To create a new administrator password hash:
    When the file variable is set, it is used instead of the inline hash.
 5. Restart with `docker compose up --build --wait`.
 
-The application never stores the password or the hash in SQLite.
+After administrator sign-in, choose **Manage bookings** to create a booking
+with only an event date. Copy the access code from the success screen before
+leaving it: the application cannot recover, reset, or regenerate that code.
+The booking party uses **Enter a booking access code** on the home page. Past
+event dates remain accessible until their booking is deleted.
+
+The application never stores the administrator password, password hash,
+access-code HMAC secret, plaintext access code, or browser session token in
+SQLite. Only keyed or one-way digests are stored.
 
 Sign-in is limited to five failed attempts per client IP in a 15-minute
 window. The default Compose file publishes port 8080 with
@@ -85,12 +98,17 @@ Open `http://localhost:8080/`.
 
 1. Choose **Administrator sign-in**.
 2. Enter `local-admin-password` (or the password you configured).
-3. Choose **Manage catalog**, then add an item with a name and whole-number
-   stock quantity. An optional JPEG, PNG, or WebP image is normalized to WebP
-   and stored under the persistent data volume.
-4. Confirm the item appears in search, and use its detail page to edit, hide,
+3. Choose **Manage bookings**, create a booking with any event date, and copy
+   the one-time code.
+4. In a private browser window, choose **Enter a booking access code**, enter
+   the code, and confirm the empty customer portal opens.
+5. Back in the administrator window, choose **Manage catalog**, then add an
+   item with a name and whole-number stock quantity. An optional JPEG, PNG, or
+   WebP image is normalized to WebP and stored under the persistent data
+   volume.
+6. Confirm the item appears in search, and use its detail page to edit, hide,
    or delete it.
-5. Choose **Sign out** and confirm the dashboard redirects back to sign-in.
+7. Choose **Sign out** and confirm the dashboard redirects back to sign-in.
 
 Health URLs:
 
@@ -108,7 +126,7 @@ GitHub Actions and Slipstream run the same command:
 docker compose run --build --rm --no-deps verify
 ```
 
-That runs formatting, linting, tests, and migration checks in the
+That runs tests and migration checks in the
 verification image. Local `docker compose up` and VPS deploys use the
 `web` service, which is the production runtime image.
 
@@ -125,17 +143,17 @@ after container replacement:
 | Path | Purpose |
 |---|---|
 | `app/` | Flask application factory, configuration, persistence, and views. |
-| `app/templates/` | Jinja pages for sign-in, dashboard, and catalog management. |
+| `app/templates/` | Jinja pages for administrator/catalog work and customer booking access. |
 | `app/static/css/` | Shared responsive CSS baseline. |
-| `migrations/` | Alembic schema history. The first revision creates `web_sessions`. |
-| `tests/` | HTTP-client tests for config, auth, health, and migrations. |
-| `scripts/verify.sh` | Formatting, lint, tests, and (on the host) container health probes. |
+| `migrations/` | Alembic schema history for sessions, catalog items, and bookings. |
+| `tests/` | HTTP-client tests for config, auth, bookings, catalog, health, and migrations. |
+| `scripts/verify.sh` | Tests and (on the host) container health probes. |
 | `scripts/entrypoint.sh` | Validates configuration and applies migrations before Gunicorn. |
 | `scripts/deploy-vps.sh` | Pull, rebuild, restart, and verify the VPS service. |
 | `compose.yaml` | Local and VPS `web` runtime service, plus a `verify` profile for checks. |
 | `Dockerfile` | Non-root Flask/Gunicorn runtime image plus a verification stage. |
 | `requirements.lock` | Locked runtime dependencies. |
-| `requirements-dev.lock` | Locked runtime plus pytest and ruff. |
+| `requirements-dev.lock` | Locked runtime plus pytest. |
 | `docs/deployment.md` | VPS deployment and recovery runbook. |
 | `docs/prd/` | Approved product requirements used to derive implementation work. |
 | `docs/plans/` | Implementation plans for focused, agent-ready work. |

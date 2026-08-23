@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Bookings — Venue Inventory{% endblock %}
+
+{% block content %}
+  <section class="panel catalog-panel">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Administrator</p>
+        <h1>Bookings</h1>
+      </div>
+      <a class="button compact-button" href="{{ url_for('admin.booking_new') }}">Create booking</a>
+    </div>
+
+    {% if bookings %}
+      <div class="booking-list">
+        {% for booking in bookings %}
+          <article class="booking-row">
+            <div>
+              <h2><a href="{{ url_for('admin.booking_detail', booking_id=booking.id) }}">{{ booking.public_reference }}</a></h2>
+              <p class="item-description">Event date: {{ booking.event_date }}</p>
+            </div>
+            <p class="booking-created">Created {{ booking.created_at }} UTC</p>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">No bookings yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}
